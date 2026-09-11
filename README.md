@@ -10,18 +10,22 @@ During development stages `endpoints` may not change, but the associated QP pair
 * _Coordination delays_ accruing technical debt, when several team members are modifying microservice data 
   - :x: endpoints not versioned
   - :x: endpoints not mapped against all the linked QP pairs per E
-  - :x: no summary of endpoint inventory
+  - :x: endpoint inventory summary and management
   - :x: no inbuilt tool for doc generation of EQP pairs
 
-So, EDMS helps to reduce the chaos so that development progresses without hassle regardless of the team size, without having to compromise speed or efficiency.  
+So, EDMS helps to reduce the chaos so that development progresses without hassle, regardless of the team size, without having to compromise speed or efficiency.  
 
 ## Features
 * :white_check_mark: **Web View** - Users can create a `hostable static website` view for all the filtered set of endpoints
 * :white_check_mark: **Repo Ready** - Versioned EQP Data can be generated in a way that's easy to push to a repo
 * :white_check_mark: **Test View** - Endpoints can be tested in real time with advanced options 
 * :white_check_mark: **Filter / Merge Data** - Endpoints from multiple sources / team members can be easily filtered into independent collections or merged into one collection
+* 🚧 **Share** - Sharing endpoints with teams `Work-In-Progress`
+* 🚧 **Online Backup** - Securely backup your EQP data online `Work-In-Progress`
 
 ### Symbols 
 * `E` : **Endpoint** 
 * `Q` : **Request**
 * `P` : **Response**
+
+`EQP` : All data related to _Endpoints_
