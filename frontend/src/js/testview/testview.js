@@ -31,6 +31,15 @@ let historyWS = null;
 let testRunStartedAt = null;
 let activeRequestNumber = null;
 
+/*
+ * Collection context — set when testview is opened via
+ * ?collection=<name> from the Collection View right-click menu.
+ * activeCollectionEndpointIds is the Set of endpoint IDs that
+ * belong to the collection; null means "show all".
+ */
+let activeCollectionFilter = null;
+let activeCollectionEndpointIds = null;
+
 const LOCAL_QP_KEY = "edmsTestViewQPs";
 
 const API_BASE = "http://localhost:3000";
@@ -154,6 +163,153 @@ async function initTestView() {
 
     updateMethodButtons();
     updateSidebarTabButtons();
+    applyTestFilters();
+
+    await initCollectionContext();
+
+}
+
+// ============================================================
+// COLLECTION CONTEXT (launched via ?collection= URL param)
+// ============================================================
+
+async function initCollectionContext() {
+
+    const params =
+        new URLSearchParams(
+            window.location.search
+        );
+
+    const collectionName =
+        params.get('collection');
+
+    if (!collectionName) {
+        return;
+    }
+
+    activeCollectionFilter = collectionName;
+
+    /*
+     * Fetch the endpoint IDs that belong to this collection
+     * so we can pre-filter the sidebar list.
+     */
+    try {
+
+        const api = window.EdmsAPI;
+
+        if (
+            api &&
+            typeof api.listCollectionEndpoints === 'function'
+        ) {
+
+            const response =
+                await api.listCollectionEndpoints(
+                    collectionName
+                );
+
+            const data =
+                response?.data ?? response;
+
+            const items =
+                Array.isArray(data)
+                    ? data
+                    : Array.isArray(data?.endpoints)
+                        ? data.endpoints
+                        : Array.isArray(data?.items)
+                            ? data.items
+                            : [];
+
+            activeCollectionEndpointIds = new Set(
+                items.map(
+                    item =>
+                        String(
+                            item?.endpoint_id ??
+                            item?.id ??
+                            item ??
+                            ''
+                        )
+                ).filter(Boolean)
+            );
+
+        }
+
+    } catch (error) {
+
+        console.error(
+            'Failed to load collection membership for Test View filter:',
+            error
+        );
+
+        activeCollectionEndpointIds = null;
+
+    }
+
+    /*
+     * Show the banner and populate it.
+     */
+    const banner =
+        document.getElementById(
+            'collectionContextBanner'
+        );
+
+    const nameEl =
+        document.getElementById(
+            'collectionContextName'
+        );
+
+    const countEl =
+        document.getElementById(
+            'collectionContextCount'
+        );
+
+    const clearBtn =
+        document.getElementById(
+            'clearCollectionFilter'
+        );
+
+    if (nameEl) {
+        nameEl.textContent =
+            collectionName;
+    }
+
+    if (countEl) {
+        const count =
+            activeCollectionEndpointIds
+                ? activeCollectionEndpointIds.size
+                : '?';
+
+        countEl.textContent =
+            `${count} endpoint${count === 1 ? '' : 's'}`;
+    }
+
+    if (banner) {
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+    }
+
+    if (clearBtn) {
+        clearBtn.addEventListener(
+            'click',
+            () => {
+
+                activeCollectionFilter = null;
+                activeCollectionEndpointIds = null;
+
+                if (banner) {
+                    banner.classList.add('hidden');
+                    banner.classList.remove('flex');
+                }
+
+                applyTestFilters();
+
+            }
+        );
+    }
+
+    /*
+     * Re-apply filters now that the collection
+     * membership set is populated.
+     */
     applyTestFilters();
 
 }
@@ -3086,6 +3242,35 @@ function applyTestFilters() {
                         item.source ||
                         item;
 
+                    /*
+                     * Collection filter — only show endpoints
+                     * that are members of the active collection
+                     * (when the page was opened via ?collection=).
+                     */
+                    if (
+                        activeCollectionEndpointIds !== null
+                    ) {
+
+                        const itemId =
+                            String(
+                                item.id ??
+                                item.endpointId ??
+                                item.endpoint_id ??
+                                ''
+                            );
+
+                        if (
+                            !activeCollectionEndpointIds.has(
+                                itemId
+                            )
+                        ) {
+
+                            return false;
+
+                        }
+
+                    }
+
                     const haystack = [
 
                         item.id,
@@ -3138,6 +3323,7 @@ function applyTestFilters() {
     renderTestEndpoints();
 
 }
+
 
 // ============================================================
 // TIME MATCH

@@ -185,15 +185,15 @@ function init() {
 
 
             <!-- ============================================ -->
-            <!-- SET ACTIVE -->
+            <!-- CREATE TEST VIEW -->
             <!-- ============================================ -->
 
             ${
                 isSingle
                     ? menuItem(
-                        'active',
-                        iconPin(),
-                        'Set Active Folder'
+                        'testview',
+                        iconFlask(),
+                        'Create Test View'
                     )
                     : ''
             }
@@ -395,23 +395,21 @@ function init() {
 
 
                 // --------------------------------------------
-                // SET ACTIVE
+                // CREATE TEST VIEW
                 // --------------------------------------------
 
-                case 'active':
+                case 'testview':
 
                     if (
                         targetIds.length === 1
                     ) {
 
                         /*
-                         * Load the selected collection into
-                         * the backend Active Collection workspace.
-                         *
-                         * This does NOT navigate to Bookmark View.
+                         * Open the Test View page in a new tab,
+                         * pre-scoped to the right-clicked collection.
                          */
-                        await window.CollectionView
-                            .loadCollectionIntoActive(
+                        window.CollectionView
+                            .openTestView(
                                 targetIds[0]
                             );
 
@@ -737,20 +735,32 @@ function init() {
     }
 
 
-    function iconPin() {
+    function iconFlask() {
 
         return iconBase(`
 
             <path
-                d="M12 17v5"
+                d="M9 3h6"
             />
 
             <path
-                d="M7 4h10"
+                d="M9 3v7L5 20h14L15 10V3"
             />
 
-            <path
-                d="M8 4v6l-3 4h14l-3-4V4"
+            <circle
+                cx="9"
+                cy="16"
+                r="1"
+                fill="currentColor"
+                stroke="none"
+            />
+
+            <circle
+                cx="13"
+                cy="14"
+                r="0.8"
+                fill="currentColor"
+                stroke="none"
             />
 
         `);
