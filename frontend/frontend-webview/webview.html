@@ -414,77 +414,69 @@
 					</div>
 				</div>
 				<div class="col-span-7 row-span-7 flex gap-4 RRpanel">
-					<div class="request w-full rounded-lg flex flex-col">
+					<div class="request w-full flex flex-col shadow-sm border border-gray-200 rounded-xl bg-white overflow-hidden">
 						<div
-							class="bg-gray-50 border-2 border-dashed rounded-xl w-full h-full flex flex-col overflow-hidden"
+							class="w-full py-3 px-4 flex items-center justify-between bg-gray-50 border-b border-gray-200"
 						>
-							<div
-								class="w-full py-2 px-2 flex items-center justify-between rounded-tl-lg rounded-tr-lg border-b-2 border-gray-300"
-							>
-								<h1 class="text-2xl font-bold">Request</h1>
-								<h2 id="size"></h2>
-								<div class="flex gap-2">
-									<button
-										class="cursor-pointer hover:bg-white hover:border-gray-300 border border-transparent p-2 transition-all duration-300 rounded-sm"
-									>
-										<img
-											src="assets/clipboard-text-alt-svgrepo-com.svg"
-											alt=""
-											class="w-5"
-										/>
-									</button>
-									<button
-										class="cursor-pointer hover:bg-white hover:border-gray-300 border border-transparent p-2 transition-all duration-300 rounded-sm"
-									>
-										<img
-											src="assets/download-svgrepo-com.svg"
-											alt=""
-											class="w-5"
-										/>
-									</button>
-								</div>
+							<h1 class="text-xl font-bold text-gray-800">Request</h1>
+							<h2 id="size" class="text-sm text-gray-500 font-medium"></h2>
+							<div class="flex gap-2">
+								<button
+									class="cursor-pointer hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 p-1.5 transition-all duration-200 rounded-md"
+								>
+									<img
+										src="assets/clipboard-text-alt-svgrepo-com.svg"
+										alt="Copy"
+										class="w-5 opacity-75"
+									/>
+								</button>
+								<button
+									class="cursor-pointer hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 p-1.5 transition-all duration-200 rounded-md"
+								>
+									<img
+										src="assets/download-svgrepo-com.svg"
+										alt="Download"
+										class="w-5 opacity-75"
+									/>
+								</button>
 							</div>
-							<div
-								class="w-[calc(100%-1rem)] mx-auto my-2 flex-1 bg-white rounded-lg border border-black overflow-auto"
-								id="request-panel"
-							></div>
 						</div>
+						<div
+							class="w-full flex-1 bg-white p-4 overflow-auto text-sm text-gray-800"
+							id="request-panel"
+						></div>
 					</div>
-					<div class="response w-full bg-gray-300 rounded-lg flex flex-col">
+					<div class="response w-full flex flex-col shadow-sm border border-gray-200 rounded-xl bg-white overflow-hidden">
 						<div
-							class="bg-gray-50 border-2 border-dashed rounded-xl w-full h-full flex flex-col overflow-hidden"
+							class="w-full py-3 px-4 flex items-center justify-between bg-gray-50 border-b border-gray-200"
 						>
-							<div
-								class="w-full py-2 px-2 flex items-center justify-between rounded-tl-lg rounded-tr-lg border-b-2 border-gray-300"
-							>
-								<h1 class="text-2xl font-bold">Response</h1>
-								<h2 id="size"></h2>
-								<div class="flex gap-2">
-									<button
-										class="cursor-pointer hover:bg-white hover:border-gray-300 border border-transparent p-2 transition-all duration-300 rounded-sm"
-									>
-										<img
-											src="assets/clipboard-text-alt-svgrepo-com.svg"
-											alt=""
-											class="w-5"
-										/>
-									</button>
-									<button
-										class="cursor-pointer hover:bg-white hover:border-gray-300 border border-transparent p-2 transition-all duration-300 rounded-sm"
-									>
-										<img
-											src="assets/download-svgrepo-com.svg"
-											alt=""
-											class="w-5"
-										/>
-									</button>
-								</div>
+							<h1 class="text-xl font-bold text-gray-800">Response</h1>
+							<h2 id="size" class="text-sm text-gray-500 font-medium"></h2>
+							<div class="flex gap-2">
+								<button
+									class="cursor-pointer hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 p-1.5 transition-all duration-200 rounded-md"
+								>
+									<img
+										src="assets/clipboard-text-alt-svgrepo-com.svg"
+										alt="Copy"
+										class="w-5 opacity-75"
+									/>
+								</button>
+								<button
+									class="cursor-pointer hover:bg-white hover:shadow-sm border border-transparent hover:border-gray-200 p-1.5 transition-all duration-200 rounded-md"
+								>
+									<img
+										src="assets/download-svgrepo-com.svg"
+										alt="Download"
+										class="w-5 opacity-75"
+									/>
+								</button>
 							</div>
-							<div
-								class="w-[calc(100%-1rem)] mx-auto my-2 flex-1 bg-white rounded-lg border border-black overflow-auto"
-								id="response-panel"
-							></div>
 						</div>
+						<div
+							class="w-full flex-1 bg-white p-4 overflow-auto text-sm text-gray-800"
+							id="response-panel"
+						></div>
 					</div>
 				</div>
 			</div>
