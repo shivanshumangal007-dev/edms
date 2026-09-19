@@ -41,6 +41,16 @@
 				/* color: #374151; */
 				transition: background-color 0.2s ease-in-out;
 			}
+			.left-sidebar-headings h1.active {
+				background: linear-gradient(
+					135deg,
+					#ecfeff 0%,
+					#f8fafc 100%
+				) !important;
+				border-color: #0f766e !important;
+				box-shadow: 0 12px 28px rgba(15, 118, 110, 0.18) !important;
+				scale: 1.02;
+			}
 		</style>
 	</head>
 	<body>
@@ -236,7 +246,7 @@
 							/>
 						</div>
 					</div>
-					<div class="flex align-center justify-between">
+					<div class="flex align-center justify-between left-sidebar-headings">
 						<h1
 							class="uppercase w-full border-b-2 border-black py-3 px-2 font-bold text-center cursor-pointer"
 							onclick="loadSegments()"
