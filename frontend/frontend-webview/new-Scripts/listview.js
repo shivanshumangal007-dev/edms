@@ -28,7 +28,9 @@ const getMethodBadgeClasses = (method) => {
     }
 };
 const updateCategoryTabStyles = () => {
-    document.querySelectorAll(".search-category-tab").forEach((tab) => {
+    document
+        .querySelectorAll(".search-category-tab")
+        .forEach((tab) => {
         const isActive = tab.dataset["category"] === selectedCategory;
         tab.classList.toggle("bg-white", isActive);
         tab.classList.toggle("text-gray-900", isActive);
@@ -66,7 +68,8 @@ const renderEndpoints = async (endpointsList) => {
         const row = document.createElement("tr");
         row.className = "hover:bg-gray-50 cursor-pointer";
         const eidCell = document.createElement("td");
-        eidCell.className = "text-gray-500 hover:text-yellow-800 hover:bg-yellow-100";
+        eidCell.className =
+            "text-gray-500 hover:text-yellow-800 hover:bg-yellow-100";
         eidCell.textContent = endpoint.eid ?? "";
         const methodCell = document.createElement("td");
         methodCell.className = "px-4 py-2";
@@ -105,13 +108,25 @@ const openSQP = (eid) => {
 // CATEGORY COUNTS
 // ─────────────────────────────────────────────
 const updateCategoryCounts = async (indexList = visibleEndpointsIndex) => {
-    const counts = { ALL: 0, GET: 0, POST: 0, PUT: 0, DELETE: 0 };
+    const counts = {
+        ALL: 0,
+        GET: 0,
+        POST: 0,
+        PUT: 0,
+        DELETE: 0,
+    };
     const sourceList = allEndpointsIndex && allEndpointsIndex.length
         ? allEndpointsIndex
         : indexList;
     if (!sourceList || sourceList.length === 0) {
-        const btnIds = ["count-all", "count-get", "count-post", "count-put", "count-delete"];
-        btnIds.forEach(id => {
+        const btnIds = [
+            "count-all",
+            "count-get",
+            "count-post",
+            "count-put",
+            "count-delete",
+        ];
+        btnIds.forEach((id) => {
             const el = document.getElementById(id);
             if (el)
                 el.innerText = "0";
@@ -263,6 +278,11 @@ const clearSidebarPathFilters = () => {
 // SIDEBAR LOADERS
 // ─────────────────────────────────────────────
 const loadSegments = async () => {
+    const sidebar_headings = document.querySelector(".left-sidebar-headings");
+    if (sidebar_headings) {
+        sidebar_headings.children[0]?.classList.add("active");
+        sidebar_headings.children[1]?.classList.remove("active");
+    }
     const sideSearchBar = document.querySelector(".left .endpointsTags .content");
     if (!sideSearchBar)
         return;
@@ -303,9 +323,15 @@ const loadSegments = async () => {
     }
 };
 const loadAllTags = async () => {
+    const sidebar_headings = document.querySelector(".left-sidebar-headings");
+    if (sidebar_headings) {
+        sidebar_headings.children[1]?.classList.add("active");
+        sidebar_headings.children[0]?.classList.remove("active");
+    }
     const sideSearchBar = document.querySelector(".left .endpointsTags .content");
     if (!sideSearchBar)
         return;
+    sideSearchBar.innerHTML = "";
     sideSearchBar.innerHTML = "";
     try {
         const tags = await LoadAllTags();
@@ -465,9 +491,12 @@ void loadSegments();
 // ─────────────────────────────────────────────
 // EXPOSE GLOBALS TO WINDOW
 // ─────────────────────────────────────────────
-window["searchEndpoints"] = searchEndpoints;
-window["clearAllFilters"] = clearAllFilters;
-window["searchCategoryChange"] = searchCategoryChange;
+window["searchEndpoints"] =
+    searchEndpoints;
+window["clearAllFilters"] =
+    clearAllFilters;
+window["searchCategoryChange"] =
+    searchCategoryChange;
 window["toggleView"] = toggleView;
 window["loadSegments"] = loadSegments;
 window["loadAllTags"] = loadAllTags;

@@ -43,21 +43,25 @@ const getMethodBadgeClasses = (method: string): string => {
 };
 
 const updateCategoryTabStyles = (): void => {
-  document.querySelectorAll<HTMLElement>(".search-category-tab").forEach((tab) => {
-    const isActive = tab.dataset["category"] === selectedCategory;
-    tab.classList.toggle("bg-white", isActive);
-    tab.classList.toggle("text-gray-900", isActive);
-    tab.classList.toggle("shadow-sm", isActive);
-    tab.classList.toggle("text-gray-700", !isActive);
-    tab.classList.toggle("hover:bg-gray-200", !isActive);
-  });
+  document
+    .querySelectorAll<HTMLElement>(".search-category-tab")
+    .forEach((tab) => {
+      const isActive = tab.dataset["category"] === selectedCategory;
+      tab.classList.toggle("bg-white", isActive);
+      tab.classList.toggle("text-gray-900", isActive);
+      tab.classList.toggle("shadow-sm", isActive);
+      tab.classList.toggle("text-gray-700", !isActive);
+      tab.classList.toggle("hover:bg-gray-200", !isActive);
+    });
 };
 
 // ─────────────────────────────────────────────
 // ENDPOINT LIST RENDERING
 // ─────────────────────────────────────────────
 
-const renderEndpoints = async (endpointsList?: EndpointIndex[]): Promise<void> => {
+const renderEndpoints = async (
+  endpointsList?: EndpointIndex[],
+): Promise<void> => {
   const tableBody = document.getElementById("endpointsTableBody");
   if (!tableBody) return;
 
@@ -88,12 +92,13 @@ const renderEndpoints = async (endpointsList?: EndpointIndex[]): Promise<void> =
     const words = annotation.trim().split(/\s+/).filter(Boolean);
     const shortAnnotation =
       words.length > 4 ? words.slice(0, 6).join(" ") + "..." : words.join(" ");
-    
+
     const row = document.createElement("tr");
     row.className = "hover:bg-gray-50 cursor-pointer";
 
     const eidCell = document.createElement("td");
-    eidCell.className = "text-gray-500 hover:text-yellow-800 hover:bg-yellow-100";
+    eidCell.className =
+      "text-gray-500 hover:text-yellow-800 hover:bg-yellow-100";
     eidCell.textContent = endpoint.eid ?? "";
 
     const methodCell = document.createElement("td");
@@ -131,7 +136,7 @@ const renderEndpoints = async (endpointsList?: EndpointIndex[]): Promise<void> =
       statusCell,
     );
     fragment.appendChild(row);
-    
+
     row.addEventListener("click", () => {
       openSQP(endpoint.eid);
     });
@@ -150,16 +155,30 @@ const openSQP = (eid: string): void => {
 // CATEGORY COUNTS
 // ─────────────────────────────────────────────
 
-const updateCategoryCounts = async (indexList: EndpointIndex[] = visibleEndpointsIndex): Promise<void> => {
-  const counts: Record<string, number> = { ALL: 0, GET: 0, POST: 0, PUT: 0, DELETE: 0 };
+const updateCategoryCounts = async (
+  indexList: EndpointIndex[] = visibleEndpointsIndex,
+): Promise<void> => {
+  const counts: Record<string, number> = {
+    ALL: 0,
+    GET: 0,
+    POST: 0,
+    PUT: 0,
+    DELETE: 0,
+  };
   const sourceList =
     allEndpointsIndex && allEndpointsIndex.length
       ? allEndpointsIndex
       : indexList;
 
   if (!sourceList || sourceList.length === 0) {
-    const btnIds = ["count-all", "count-get", "count-post", "count-put", "count-delete"];
-    btnIds.forEach(id => {
+    const btnIds = [
+      "count-all",
+      "count-get",
+      "count-post",
+      "count-put",
+      "count-delete",
+    ];
+    btnIds.forEach((id) => {
       const el = document.getElementById(id);
       if (el) el.innerText = "0";
     });
@@ -194,7 +213,9 @@ const updateCategoryCounts = async (indexList: EndpointIndex[] = visibleEndpoint
 // ─────────────────────────────────────────────
 
 const getSearchInputValue = (): string => {
-  const input = document.querySelector<HTMLInputElement>('main input[type="text"]');
+  const input = document.querySelector<HTMLInputElement>(
+    'main input[type="text"]',
+  );
   return (input?.value ?? "").trim().toLowerCase();
 };
 
@@ -282,7 +303,9 @@ const clearAllFilters = (): void => {
   selectedCategory = "ALL";
   clearSidebarPathFilters();
   updateCategoryTabStyles();
-  const input = document.querySelector<HTMLInputElement>('main input[type="text"]');
+  const input = document.querySelector<HTMLInputElement>(
+    'main input[type="text"]',
+  );
   if (input) input.value = "";
   visibleEndpointsIndex = [...allEndpointsIndex];
   currentPage = 1;
@@ -319,7 +342,9 @@ const toggleSidebarTagFilter = (tag: string, isChecked: boolean): void => {
 const clearSidebarPathFilters = (): void => {
   selectedPathFilters = [];
   document
-    .querySelectorAll<HTMLInputElement>('.left .endpointsTags .content input[type="checkbox"]')
+    .querySelectorAll<HTMLInputElement>(
+      '.left .endpointsTags .content input[type="checkbox"]',
+    )
     .forEach((checkbox) => {
       checkbox.checked = false;
     });
@@ -330,9 +355,14 @@ const clearSidebarPathFilters = (): void => {
 // ─────────────────────────────────────────────
 
 const loadSegments = async (): Promise<void> => {
+  const sidebar_headings = document.querySelector(".left-sidebar-headings");
+  if (sidebar_headings) {
+    sidebar_headings.children[0]?.classList.add("active");
+    sidebar_headings.children[1]?.classList.remove("active");
+  }
   const sideSearchBar = document.querySelector(".left .endpointsTags .content");
   if (!sideSearchBar) return;
-  
+
   sideSearchBar.innerHTML = "";
   try {
     const segments = await LoadSegments();
@@ -349,7 +379,9 @@ const loadSegments = async (): Promise<void> => {
           ${(segments[path] ?? []).length}
         </span>`;
 
-      const checkbox = pathElement.querySelector<HTMLInputElement>('input[type="checkbox"]');
+      const checkbox = pathElement.querySelector<HTMLInputElement>(
+        'input[type="checkbox"]',
+      );
       if (checkbox) {
         checkbox.addEventListener("click", (event) => {
           event.stopPropagation();
@@ -371,8 +403,14 @@ const loadSegments = async (): Promise<void> => {
 };
 
 const loadAllTags = async (): Promise<void> => {
+  const sidebar_headings = document.querySelector(".left-sidebar-headings");
+  if (sidebar_headings) {
+    sidebar_headings.children[1]?.classList.add("active");
+    sidebar_headings.children[0]?.classList.remove("active");
+  }
   const sideSearchBar = document.querySelector(".left .endpointsTags .content");
   if (!sideSearchBar) return;
+  sideSearchBar.innerHTML = "";
 
   sideSearchBar.innerHTML = "";
   try {
@@ -388,7 +426,9 @@ const loadAllTags = async (): Promise<void> => {
         </div>
         <span class="text-xs text-muted-foreground">${(tags[tag] ?? []).length}</span>`;
 
-      const checkbox = pathElement.querySelector<HTMLInputElement>('input[type="checkbox"]');
+      const checkbox = pathElement.querySelector<HTMLInputElement>(
+        'input[type="checkbox"]',
+      );
       if (checkbox) {
         checkbox.addEventListener("click", (event) => {
           event.stopPropagation();
@@ -483,12 +523,12 @@ const renderCurrentPage = async (): Promise<void> => {
   syncPaginationState();
   await renderEndpoints(visibleEndpointsIndex);
   updatePaginationDisplay();
-  
+
   const max_page = document.querySelector("#max-page");
   if (max_page) {
     max_page.textContent = String(totalPages);
   }
-  
+
   const page_input = document.querySelector<HTMLInputElement>("#page-input");
   if (page_input) {
     page_input.value = String(currentPage);
@@ -549,7 +589,8 @@ LoadMetaData().then((metaData) => {
     if (totalSegmentsEl) totalSegmentsEl.innerText = String(metaData.segments);
 
     const totalEndpointsEl = document.getElementById("total_endpoints");
-    if (totalEndpointsEl) totalEndpointsEl.innerText = String(metaData.endpoints);
+    if (totalEndpointsEl)
+      totalEndpointsEl.innerText = String(metaData.endpoints);
 
     pagination(metaData);
   }
@@ -562,9 +603,12 @@ void loadSegments();
 // EXPOSE GLOBALS TO WINDOW
 // ─────────────────────────────────────────────
 
-(window as unknown as Record<string, unknown>)["searchEndpoints"] = searchEndpoints;
-(window as unknown as Record<string, unknown>)["clearAllFilters"] = clearAllFilters;
-(window as unknown as Record<string, unknown>)["searchCategoryChange"] = searchCategoryChange;
+(window as unknown as Record<string, unknown>)["searchEndpoints"] =
+  searchEndpoints;
+(window as unknown as Record<string, unknown>)["clearAllFilters"] =
+  clearAllFilters;
+(window as unknown as Record<string, unknown>)["searchCategoryChange"] =
+  searchCategoryChange;
 (window as unknown as Record<string, unknown>)["toggleView"] = toggleView;
 (window as unknown as Record<string, unknown>)["loadSegments"] = loadSegments;
 (window as unknown as Record<string, unknown>)["loadAllTags"] = loadAllTags;
