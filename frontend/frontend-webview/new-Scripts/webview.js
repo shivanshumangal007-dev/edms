@@ -9,6 +9,7 @@ let totalPages = 0;
 let visibleEndpointsIndex = [];
 let allEndpointsIndex = [];
 let selectedPathFilters = [];
+let selectedTagFilters = [];
 let _visibleEndpointsBeforeSearch = null;
 // ─────────────────────────────────────────────
 // STYLE HELPERS
@@ -333,32 +334,53 @@ const searchEndpoints = async () => {
 // ─────────────────────────────────────────────
 // PATH FILTERS (sidebar)
 // ─────────────────────────────────────────────
-const applyPathFilters = async () => {
-    const EidSegmentsData = await LoadSegments();
-    if (selectedPathFilters.length === 0) {
-        visibleEndpointsIndex = [...allEndpointsIndex];
-    }
-    else {
+const applySidebarFilters = async () => {
+    let filteredIndex = [...allEndpointsIndex];
+    if (selectedPathFilters.length > 0) {
+        const EidSegmentsData = await LoadSegments();
         const filteredEids = new Set();
         selectedPathFilters.forEach((filter) => {
             (EidSegmentsData[filter] ?? []).forEach((eid) => filteredEids.add(eid));
         });
-        visibleEndpointsIndex = allEndpointsIndex.filter((entry) => filteredEids.has(entry.eid));
+        filteredIndex = filteredIndex.filter((entry) => filteredEids.has(entry.eid));
     }
+    if (selectedTagFilters.length > 0) {
+        const EidTagsData = await LoadAllTags();
+        const filteredEids = new Set();
+        selectedTagFilters.forEach((filter) => {
+            (EidTagsData[filter] ?? []).forEach((eid) => filteredEids.add(eid));
+        });
+        filteredIndex = filteredIndex.filter((entry) => filteredEids.has(entry.eid));
+    }
+    visibleEndpointsIndex = filteredIndex;
     currentPage = 1;
     void renderCurrentPage();
 };
 const toggleSidebarPathFilter = (path, isChecked) => {
     if (isChecked) {
-        selectedPathFilters.push(path);
+        if (!selectedPathFilters.includes(path)) {
+            selectedPathFilters.push(path);
+        }
     }
     else {
         selectedPathFilters = selectedPathFilters.filter((p) => p !== path);
     }
-    void applyPathFilters();
+    void applySidebarFilters();
 };
-const clearSidebarPathFilters = () => {
+const toggleSidebarTagFilter = (tag, isChecked) => {
+    if (isChecked) {
+        if (!selectedTagFilters.includes(tag)) {
+            selectedTagFilters.push(tag);
+        }
+    }
+    else {
+        selectedTagFilters = selectedTagFilters.filter((t) => t !== tag);
+    }
+    void applySidebarFilters();
+};
+const clearSidebarFilters = () => {
     selectedPathFilters = [];
+    selectedTagFilters = [];
     document
         .querySelectorAll('.endpointsTags .content input[type="checkbox"]')
         .forEach((checkbox) => {
@@ -367,9 +389,10 @@ const clearSidebarPathFilters = () => {
 };
 const clearAllFilters = () => {
     selectedPathFilters = [];
+    selectedTagFilters = [];
     selectedCategory = "ALL";
     _visibleEndpointsBeforeSearch = null;
-    clearSidebarPathFilters();
+    clearSidebarFilters();
     updateCategoryTabStyles();
     visibleEndpointsIndex = [...allEndpointsIndex];
     currentPage = 1;
@@ -445,11 +468,11 @@ const loadAllTagsSidebar = async () => {
                 continue;
             checkbox.addEventListener("click", (event) => event.stopPropagation());
             checkbox.addEventListener("change", () => {
-                toggleSidebarPathFilter(tag, checkbox.checked);
+                toggleSidebarTagFilter(tag, checkbox.checked);
             });
             pathElement.addEventListener("click", () => {
                 checkbox.checked = !checkbox.checked;
-                toggleSidebarPathFilter(tag, checkbox.checked);
+                toggleSidebarTagFilter(tag, checkbox.checked);
                 pathElement.classList.toggle("active", checkbox.checked);
             });
             sideSearchBar.appendChild(pathElement);

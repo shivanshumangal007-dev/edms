@@ -570,6 +570,17 @@
         "reports"
       ],
       "status": "inactive"
+    },
+    "GET": {
+      "eid": "EID-047",
+      "qpPairs": 4,
+      "annotation": "reports reports endpoint handling request operations",
+      "tags": [
+        "products",
+        "reports",
+        "admin"
+      ],
+      "status": "active"
     }
   },
   "/api/v2/update/reports": {
