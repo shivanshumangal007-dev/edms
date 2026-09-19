@@ -170,6 +170,21 @@ function init() {
 
 
             <!-- ============================================ -->
+            <!-- BOOKMARK PREVIEW -->
+            <!-- ============================================ -->
+
+            ${
+                isSingle
+                    ? menuItem(
+                        'bookmarkpreview',
+                        iconEye(),
+                        'Bookmark Preview'
+                    )
+                    : ''
+            }
+
+
+            <!-- ============================================ -->
             <!-- WEB VIEW -->
             <!-- ============================================ -->
 
@@ -386,6 +401,26 @@ function init() {
 
                         window.CollectionView
                             .openDataView(
+                                targetIds[0]
+                            );
+
+                    }
+
+                    break;
+
+
+                // --------------------------------------------
+                // BOOKMARK PREVIEW
+                // --------------------------------------------
+
+                case 'bookmarkpreview':
+
+                    if (
+                        targetIds.length === 1
+                    ) {
+
+                        window.CollectionView
+                            .openBookmarkView(
                                 targetIds[0]
                             );
 
@@ -876,6 +911,25 @@ function init() {
 
             <path
                 d="M9 14h6"
+            />
+
+        `);
+
+    }
+
+
+    function iconEye() {
+
+        return iconBase(`
+
+            <path
+                d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"
+            />
+
+            <circle
+                cx="12"
+                cy="12"
+                r="3"
             />
 
         `);

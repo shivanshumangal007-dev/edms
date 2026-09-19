@@ -34,6 +34,15 @@ const activeFilters = {
     segments: new Set()
 };
 
+/*
+ * Collection context — set when listview is opened via
+ * ?collection=<name> from the Collection View preview button.
+ * activeCollectionEndpointIds is the Set of endpoint IDs that
+ * belong to the collection; null means "show all".
+ */
+let activeCollectionFilter = null;
+let activeCollectionEndpointIds = null;
+
 // ============================================================
 // DOM
 // ============================================================
@@ -227,6 +236,178 @@ async function init() {
     renderTable();
     updateFooter();
     updateSelectionUI();
+
+    await initCollectionContext();
+
+}
+
+// ============================================================
+// COLLECTION CONTEXT (launched via ?collection= URL param)
+// ============================================================
+
+async function initCollectionContext() {
+
+    const params =
+        new URLSearchParams(
+            window.location.search
+        );
+
+    const collectionName =
+        params.get('collection');
+
+    if (!collectionName) {
+        return;
+    }
+
+    activeCollectionFilter = collectionName;
+
+    /*
+     * Fetch the endpoint IDs that belong to this collection
+     * so we can pre-filter the list.
+     */
+    try {
+
+        const api = window.EdmsAPI;
+
+        if (
+            api &&
+            typeof api.listCollectionEndpoints === 'function'
+        ) {
+
+            const response =
+                await api.listCollectionEndpoints(
+                    collectionName
+                );
+
+            const data =
+                response?.data ?? response;
+
+            const items =
+                Array.isArray(data)
+                    ? data
+                    : Array.isArray(data?.endpoints)
+                        ? data.endpoints
+                        : Array.isArray(data?.items)
+                            ? data.items
+                            : [];
+
+            activeCollectionEndpointIds = new Set(
+                items.map(
+                    item =>
+                        String(
+                            item?.endpoint_id ??
+                            item?.id ??
+                            item ??
+                            ''
+                        )
+                ).filter(Boolean)
+            );
+
+        }
+
+    } catch (error) {
+
+        console.error(
+            'Failed to load collection membership for Bookmark View filter:',
+            error
+        );
+
+        activeCollectionEndpointIds = null;
+
+    }
+
+    /*
+     * Show the banner and populate it.
+     */
+    const banner =
+        document.getElementById(
+            'collectionContextBanner'
+        );
+
+    const nameEl =
+        document.getElementById(
+            'collectionContextName'
+        );
+
+    const countEl =
+        document.getElementById(
+            'collectionContextCount'
+        );
+
+    const clearBtn =
+        document.getElementById(
+            'clearCollectionFilter'
+        );
+
+    /*
+     * Update the header title to show the collection name.
+     */
+    const titleEl =
+        document.getElementById('listviewTitle');
+
+    const subtitleEl =
+        document.getElementById('listviewSubtitle');
+
+    if (titleEl) {
+        titleEl.textContent = collectionName;
+    }
+
+    if (subtitleEl) {
+        subtitleEl.textContent = 'Bookmark View — Collection Preview';
+    }
+
+    if (nameEl) {
+        nameEl.textContent =
+            collectionName;
+    }
+
+    if (countEl) {
+        const count =
+            activeCollectionEndpointIds
+                ? activeCollectionEndpointIds.size
+                : '?';
+
+        countEl.textContent =
+            `${count} endpoint${count === 1 ? '' : 's'}`;
+    }
+
+    if (banner) {
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+    }
+
+    if (clearBtn) {
+        clearBtn.addEventListener(
+            'click',
+            () => {
+
+                activeCollectionFilter = null;
+                activeCollectionEndpointIds = null;
+
+                if (banner) {
+                    banner.classList.add('hidden');
+                    banner.classList.remove('flex');
+                }
+
+                /* Reset header back to default */
+                if (titleEl) {
+                    titleEl.textContent = 'Bookmarks';
+                }
+
+                if (subtitleEl) {
+                    subtitleEl.textContent = 'Endpoint List View';
+                }
+
+                applyFilters();
+
+            }
+        );
+    }
+
+    /*
+     * Re-apply filters now that the collection set is known.
+     */
+    applyFilters();
 
 }
 
@@ -878,6 +1059,16 @@ function applyFilters() {
         endpoints.filter(
             endpoint => {
 
+                const matchesCollection =
+                    !activeCollectionEndpointIds ||
+                    activeCollectionEndpointIds.has(
+                        String(
+                            endpoint.endpoint_id ??
+                            endpoint.id ??
+                            ''
+                        )
+                    );
+
                 const search =
                     activeFilters.search;
 
@@ -944,6 +1135,7 @@ function applyFilters() {
                         );
 
                 return (
+                    matchesCollection &&
                     matchesSearch &&
                     matchesCRUD &&
                     matchesTags &&
