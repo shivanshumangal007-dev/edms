@@ -1,26 +1,35 @@
 # EDMS Webview
 
-This repository serves a static EDMS UI through Nginx.
+This repository serves a static EDMS UI through Nginx. The codebase uses TypeScript for modular scripting and Tailwind CSS for styling.
 
 ## What is in this repo
 
-- `webview.html` is the default page Nginx opens when you visit the server.
-- `Dashboard.html` is the dashboard view.
-- `listview.html` is the list-based view.
+- `webview.html` is the default page for Endpoint Cards.
+- `Dashboard.html` is the analytics dashboard view.
+- `listview.html` is the list-based endpoint view.
 - `Single-EQP.html` is the single endpoint/detail view.
 - `assets/` contains static UI assets such as styles, icons, and images.
-- `data/` contains the smaller trimmed dataset.
-- `Scripts/` contains the JavaScript files that power the UI.
+- `data/` & `data-new-2/` contains the JSON datasets loaded by the UI.
+- `TypeScripts/` contains the modern TypeScript source files (the current standard for UI logic).
+- `new-Scripts/` contains the compiled JS modules generated from TypeScript.
+- `Scripts/` contains the legacy vanilla JavaScript files (retained for reference).
 - `nginx.conf` is the Nginx configuration used by the Docker container.
 - `tailwind.config.js` is the Tailwind CSS configuration.
+- `package.json` & `tsconfig.json` manage TypeScript dependencies and build configurations.
+
+## Building the Code
+
+Before starting the server, you need to compile the TypeScript files into JavaScript:
+
+```bash
+npm install
+npm run build
+```
+*(This generates the modular JS files into the `new-Scripts/` directory which the HTML pages rely on).*
 
 ## Run the server with Docker
 
 Run the Docker command from the repository root, the same folder that contains `nginx.conf` and `webview.html`.
-
-Example path on this machine:
-
-`/Users/shivanshumangal/Coding/HASHEDTOKEN/EDMS-webview`
 
 Open a terminal in that folder, then run:
 
