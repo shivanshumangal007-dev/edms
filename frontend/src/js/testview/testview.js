@@ -2903,7 +2903,7 @@ function doClearSelectionQP() {
 // DELETE SELECTED QP
 // ============================================================
 
-function doDeleteSelectedQP() {
+async function doDeleteSelectedQP() {
 
     if (
         !selectedTestEndpoint ||
@@ -2921,6 +2921,27 @@ function doDeleteSelectedQP() {
         );
 
         return;
+    }
+
+    const endpointId = selectedTestEndpoint.id;
+
+    if (endpointId !== undefined && endpointId !== null) {
+        const deletePromises = [];
+        for (const qpId of selectedQPIds) {
+            if (String(qpId) !== "default") {
+                deletePromises.push(
+                    fetch(
+                        `${API_BASE}/test-view/${encodeURIComponent(endpointId)}/qps/${encodeURIComponent(qpId)}/delete`,
+                        { method: "POST" }
+                    ).catch(error => {
+                        console.error(`Error deleting QP ${qpId}:`, error);
+                    })
+                );
+            }
+        }
+        if (deletePromises.length > 0) {
+            await Promise.all(deletePromises);
+        }
     }
 
     selectedTestEndpoint.qps =
@@ -2945,7 +2966,7 @@ function doDeleteSelectedQP() {
 // SELECT QP
 // ============================================================
 
-function selectTestQP(
+async function selectTestQP(
     qp,
     button
 ) {
@@ -2992,6 +3013,52 @@ function selectTestQP(
 
     renderCurrentRequest();
     renderCurrentResponse();
+
+    if (qp.id !== "default" && selectedTestEndpoint?.id && !qp.isFullDataLoaded) {
+        try {
+            const endpointId = encodeURIComponent(selectedTestEndpoint.id);
+            const qpId = encodeURIComponent(qp.id);
+
+            const [reqRes, resRes, headRes] = await Promise.all([
+                fetch(`${API_BASE}/test-view/${endpointId}/request/${qpId}`).catch(() => null),
+                fetch(`${API_BASE}/test-view/${endpointId}/response/${qpId}`).catch(() => null),
+                fetch(`${API_BASE}/test-view/${endpointId}/headers/${qpId}`).catch(() => null)
+            ]);
+
+            qp.request = qp.request || {};
+            qp.response = qp.response || {};
+
+            if (reqRes && reqRes.ok) {
+                const text = await reqRes.text();
+                try { qp.request.body = JSON.parse(text); } 
+                catch { qp.request.body = text; }
+            }
+
+            if (resRes && resRes.ok) {
+                const text = await resRes.text();
+                try { qp.response.body = JSON.parse(text); } 
+                catch { qp.response.body = text; }
+            }
+
+            if (headRes && headRes.ok) {
+                const text = await headRes.text();
+                try {
+                    const headersData = JSON.parse(text);
+                    qp.request.headers = headersData.request_headers || {};
+                    qp.response.headers = headersData.response_headers || {};
+                } catch {}
+            }
+
+            qp.isFullDataLoaded = true;
+
+            if (selectedTestQP === qp) {
+                renderCurrentRequest();
+                renderCurrentResponse();
+            }
+        } catch (error) {
+            console.error("Failed to load full QP data:", error);
+        }
+    }
 
 }
 
