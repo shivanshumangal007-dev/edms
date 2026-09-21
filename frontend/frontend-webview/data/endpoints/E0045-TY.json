@@ -1,1 +1,0 @@
-{"eid":"E0045-TY","count":3,"qpPairs":3,"annotation":"notifications summary endpoint handling request operations","method":"POST","path":"/api/v1/notifications/summary","tags":["users","inventory","auth"],"status":"deprecated"}
