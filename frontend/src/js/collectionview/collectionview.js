@@ -734,8 +734,6 @@
 
     const isSelected = state.selected.has(id);
 
-    const isActive = Number(state.activeFolderId) === id;
-
     const endpoints = Array.isArray(folder.endpoints) ? folder.endpoints : [];
 
     const counts = getCrudCounts(endpoints);
@@ -753,8 +751,6 @@
       "hover:bg-slate-800/60",
 
       isSelected ? "bg-cyan-500/[0.045]" : "",
-
-      isActive ? "bg-sky-500/[0.055]" : "",
     ]
       .filter(Boolean)
       .join(" ");
@@ -783,19 +779,6 @@
                 class="flex min-w-0
                        items-center gap-2"
             >
-
-                ${
-                  isActive
-                    ? `
-                            <span
-                                class="h-1.5 w-1.5
-                                       shrink-0 rounded-full
-                                       bg-cyan-400"
-                                title="Active collection"
-                            ></span>
-                          `
-                    : ""
-                }
 
                 <span
                     class="truncate flex-1"
