@@ -373,6 +373,54 @@ async function fetchEndpointTags(endpointId) {
 
 }
 
+// ============================================================
+// QP API
+// ============================================================
+
+async function fetchEndpointQPs(endpointId) {
+
+    if (
+        endpointId === undefined ||
+        endpointId === null
+    ) {
+
+        return [];
+
+    }
+
+    const response =
+        await fetch(
+            `${API_BASE}/test-view/${encodeURIComponent(endpointId)}/qps`
+        );
+
+    if (!response.ok) {
+
+        throw new Error(
+            `Failed to load endpoint QPs: ${response.status}`
+        );
+
+    }
+
+    const data =
+        await response.json();
+
+    if (!data.ok || !Array.isArray(data.qps)) {
+        return [];
+    }
+
+    return data.qps.map(qp => ({
+        id: qp.request_number,
+        name: String(qp.request_number),
+        method: qp.method,
+        timestamp: qp.timestamp,
+        status_code: qp.status_code,
+        response_time_ms: qp.response_time_ms,
+        request: {},
+        response: {}
+    }));
+
+}
+
 async function addEndpointTag(endpointId, tag) {
 
     if (
@@ -558,15 +606,31 @@ async function loadEndpointTagsFromBackend() {
 
                 try {
 
-                    endpoint.tags =
-                        await fetchEndpointTags(
-                            endpoint.id
-                        );
+                    const [tags, qps] = await Promise.all([
+                        fetchEndpointTags(endpoint.id),
+                        fetchEndpointQPs(endpoint.id)
+                    ]);
+
+                    endpoint.tags = tags;
+
+                    if (qps.length > 0) {
+                        const localQPs = Array.isArray(endpoint.qps) ? endpoint.qps : [];
+                        endpoint.qps = qps.map(backendQp => {
+                            const localQp = localQPs.find(q => String(q.id) === String(backendQp.id));
+                            return {
+                                ...backendQp,
+                                request: localQp?.request || {},
+                                response: localQp?.response || {}
+                            };
+                        });
+                    } else if (!Array.isArray(endpoint.qps)) {
+                        endpoint.qps = [];
+                    }
 
                 } catch (error) {
 
                     console.warn(
-                        `Could not load tags for endpoint ${endpoint.id}:`,
+                        `Could not load tags or QPs for endpoint ${endpoint.id}:`,
                         error
                     );
 
@@ -577,6 +641,16 @@ async function loadEndpointTagsFromBackend() {
                     ) {
 
                         endpoint.tags = [];
+
+                    }
+                    
+                    if (
+                        !Array.isArray(
+                            endpoint.qps
+                        )
+                    ) {
+
+                        endpoint.qps = [];
 
                     }
 
@@ -2243,10 +2317,26 @@ async function refreshSelectedEndpointTags() {
 
     try {
 
-        selectedTestEndpoint.tags =
-            await fetchEndpointTags(
-                selectedTestEndpoint.id
-            );
+        const [tags, qps] = await Promise.all([
+            fetchEndpointTags(selectedTestEndpoint.id),
+            fetchEndpointQPs(selectedTestEndpoint.id)
+        ]);
+
+        selectedTestEndpoint.tags = tags;
+        
+        if (qps.length > 0) {
+            const localQPs = Array.isArray(selectedTestEndpoint.qps) ? selectedTestEndpoint.qps : [];
+            selectedTestEndpoint.qps = qps.map(backendQp => {
+                const localQp = localQPs.find(q => String(q.id) === String(backendQp.id));
+                return {
+                    ...backendQp,
+                    request: localQp?.request || {},
+                    response: localQp?.response || {}
+                };
+            });
+        } else if (!Array.isArray(selectedTestEndpoint.qps)) {
+            selectedTestEndpoint.qps = [];
+        }
 
         const endpoint =
             findEndpoint(
@@ -2257,13 +2347,16 @@ async function refreshSelectedEndpointTags() {
 
             endpoint.tags =
                 selectedTestEndpoint.tags;
+                
+            endpoint.qps =
+                selectedTestEndpoint.qps;
 
         }
 
     } catch (error) {
 
         console.warn(
-            "Could not refresh endpoint tags:",
+            "Could not refresh endpoint tags or QPs:",
             error
         );
 
