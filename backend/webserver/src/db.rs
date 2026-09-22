@@ -4,8 +4,11 @@ use edms::query_loader::QueryMap;
 use rusqlite::ToSql;
 use serde::{Deserialize, Serialize};
 
-pub const ACTIVE_FOLDER: &str = "__active__";
-pub const SESSION_BACKUP_FOLDER: &str = "__session_backup__";
+// ACTIVE_FOLDER / SESSION_BACKUP_FOLDER retired (2026-09-22, Option A bookmark
+// redesign): there is no longer a single global "active" bucket — every
+// bookmark now belongs to an explicit collection (folder = collection name),
+// so there is nothing to back up when switching, and no gate to check
+// before writing. See handlers/bookmarks.rs and handlers/test_view.rs.
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EndpointDto {
@@ -239,31 +242,52 @@ pub fn bookmarks_count(core: &EdmsCore, queries: &QueryMap, folder: &str) -> Edm
     Ok(rows.first().copied().unwrap_or(0) as usize)
 }
 
-pub fn bookmarks_count_active(core: &EdmsCore, queries: &QueryMap) -> EdmsResult<usize> {
-    bookmarks_count(core, queries, ACTIVE_FOLDER)
+/// Total bookmarks across every collection — the closest equivalent to the
+/// old "active" bucket's count now that there's no single privileged one.
+pub fn bookmarks_count_total(core: &EdmsCore, queries: &QueryMap) -> EdmsResult<usize> {
+    let q = queries.get_bookmark_query("B11").ok_or(EdmsError::UnknownError)?;
+    let rows: Vec<i64> = core.cproc(q, &[], |row| row.get(0))?;
+    Ok(rows.first().copied().unwrap_or(0) as usize)
 }
 
-pub fn clear_bookmarks_active(core: &EdmsCore, queries: &QueryMap) -> EdmsResult<usize> {
-    let q = queries.get_bookmark_query("B2").ok_or(EdmsError::UnknownError)?;
-    core.proc(q, &[&ACTIVE_FOLDER])
-}
-
-pub fn list_bookmarked_endpoints_active(core: &EdmsCore, queries: &QueryMap) -> EdmsResult<Vec<String>> {
-    // Returns endpoint_ids in active list
-    let q = queries.get_bookmark_query("B3").ok_or(EdmsError::UnknownError)?;
-    core.cproc(q, &[&ACTIVE_FOLDER], |row| row.get(0))
-}
-
-/// Same as `list_bookmarked_endpoints_active`, but also carries when each
-/// one was bookmarked — the "updated" field bookmark-view consumers expect
-/// (previously always null: it was tracked in the `bookmarks` table the
-/// whole time, just never selected past this query).
-pub fn list_bookmarked_endpoints_active_with_timestamps(
+/// List endpoint IDs bookmarked into a specific folder (collection), with
+/// when each one was bookmarked — the "updated" field bookmark-view
+/// consumers expect.
+pub fn list_bookmarked_endpoints_with_timestamps(
     core: &EdmsCore,
     queries: &QueryMap,
+    folder: &str,
 ) -> EdmsResult<Vec<(String, String)>> {
     let q = queries.get_bookmark_query("B10").ok_or(EdmsError::UnknownError)?;
-    core.cproc(q, &[&ACTIVE_FOLDER], |row| Ok((row.get(0)?, row.get(1)?)))
+    core.cproc(q, &[&folder], |row| Ok((row.get(0)?, row.get(1)?)))
+}
+
+/// Whether an endpoint is currently bookmarked into a specific folder.
+pub fn bookmark_exists(core: &EdmsCore, queries: &QueryMap, folder: &str, endpoint_id: &str) -> EdmsResult<bool> {
+    let q = queries.get_bookmark_query("B4").ok_or(EdmsError::UnknownError)?;
+    let rows: Vec<i64> = core.cproc(q, &[&folder, &endpoint_id], |row| row.get(0))?;
+    Ok(rows.first().copied().unwrap_or(0) > 0)
+}
+
+/// Cascade for collection deletion: drops every bookmark that belonged to
+/// it, so deleting a collection doesn't leave orphaned rows behind.
+pub fn delete_bookmarks_for_folder(core: &EdmsCore, queries: &QueryMap, folder: &str) -> EdmsResult<usize> {
+    let q = queries.get_bookmark_query("B2").ok_or(EdmsError::UnknownError)?;
+    core.proc(q, &[&folder])
+}
+
+/// Cascade for collection rename: keeps its bookmarks attached under the
+/// new name instead of stranding them under the old one.
+pub fn rename_bookmarks_folder(core: &EdmsCore, queries: &QueryMap, old_folder: &str, new_folder: &str) -> EdmsResult<usize> {
+    let q = queries.get_bookmark_query("B12").ok_or(EdmsError::UnknownError)?;
+    core.proc(q, &[&new_folder, &old_folder])
+}
+
+/// Cascade for endpoint deletion: drops all of its bookmarks, across every
+/// collection, not just one.
+pub fn delete_bookmarks_for_endpoint(core: &EdmsCore, queries: &QueryMap, endpoint_id: &str) -> EdmsResult<usize> {
+    let q = queries.get_bookmark_query("B13").ok_or(EdmsError::UnknownError)?;
+    core.proc(q, &[&endpoint_id])
 }
 
 /// Bookmark an endpoint into an arbitrary folder (not just `active`).
@@ -299,70 +323,18 @@ pub fn delete_bookmark(core: &EdmsCore, queries: &QueryMap, endpoint_id: &str, f
     )
 }
 
-pub fn insert_bookmark_active(core: &EdmsCore, queries: &QueryMap, endpoint_id: &str, notes: Option<&str>) -> EdmsResult<usize> {
-    insert_bookmark(core, queries, endpoint_id, ACTIVE_FOLDER, notes)
-}
-
-pub fn delete_bookmark_active(core: &EdmsCore, queries: &QueryMap, endpoint_id: &str) -> EdmsResult<usize> {
-    delete_bookmark(core, queries, endpoint_id, ACTIVE_FOLDER)
-}
-
 /* ---------------- collections (folder column) ---------------- */
 //
 // System 1 (arbitrary named bookmark folders as pseudo-collections) is
-// retired as of the bookmark/collection merge (Mathew, 2026-09-08).
-// `create_collection_from_active`/`load_collection_into_active` — which
-// used to snapshot/restore against the `bookmarks` table's `folder`
-// column — are gone. Real collections are System 2
-// (`storage/collections/{name}.sqlite`, via CollectionMembershipOps);
-// see handlers/bookmarks.rs for the load/save/unsave flow that replaces
-// them, using this backup helper as its "don't lose unsaved active
-// bookmarks on switch" step.
-
-/// Backs up whatever's currently in `active` into the single rolling
-/// `__session_backup__` slot, overwriting whatever backup was there
-/// before. Returns whether there was anything to back up.
-///
-/// Per Mathew (2026-09-08): kept as the existing single-slot behavior —
-/// not per-collection — so only the *most recent* switch is protected,
-/// by design, not every collection ever visited.
-pub fn backup_active_bookmarks(core: &EdmsCore, queries: &QueryMap) -> EdmsResult<bool> {
-    let active_count = bookmarks_count_active(core, queries)?;
-    if active_count == 0 {
-        return Ok(false);
-    }
-
-    let b2 = queries.get_bookmark_query("B2").ok_or(EdmsError::UnknownError)?;
-    let _ = core.proc(b2, &[&SESSION_BACKUP_FOLDER]);
-
-    let endpoint_ids = list_bookmarked_endpoints_active(core, queries)?;
-    let b7 = queries.get_bookmark_query("B7").ok_or(EdmsError::UnknownError)?;
-    for eid in endpoint_ids {
-        core.proc(b7, &[&eid, &SESSION_BACKUP_FOLDER])?;
-    }
-    Ok(true)
-}
-
-pub fn restore_from_backup(core: &EdmsCore, queries: &QueryMap) -> EdmsResult<usize> {
-    // Clear current active
-    clear_bookmarks_active(core, queries)?;
-    
-    // Copy backup to active
-    let b3 = queries.get_bookmark_query("B3").ok_or(EdmsError::UnknownError)?;
-    let ids: Vec<String> = core.cproc(b3, &[&SESSION_BACKUP_FOLDER], |row| row.get(0))?;
-    
-    let mut restored = 0usize;
-    for eid in ids {
-        restored += insert_bookmark_active(core, queries, &eid, None)?;
-    }
-    
-    Ok(restored)
-}
-
-pub fn clear_session_backup(core: &EdmsCore, queries: &QueryMap) -> EdmsResult<usize> {
-    let b2 = queries.get_bookmark_query("B2").ok_or(EdmsError::UnknownError)?;
-    core.proc(b2, &[&SESSION_BACKUP_FOLDER])
-}
+// retired as of the bookmark/collection merge (Mathew, 2026-09-08). Real
+// collections are System 2 (`storage/collections/{name}.sqlite`, via
+// CollectionMembershipOps) — `folder` here now holds a real collection
+// name directly. The single-"active"-bucket layer that used to sit
+// between them (insert_bookmark_active, backup_active_bookmarks,
+// restore_from_backup, clear_session_backup, __session_backup__) is
+// retired too (2026-09-22): with bookmarks keyed by the actual collection
+// name instead of one shared slot, there's nothing to back up when
+// switching — every collection's bookmarks are already durably separate.
 
 pub fn endpoints_for_ids(core: &EdmsCore, _queries: &QueryMap, ids: &[String]) -> EdmsResult<Vec<EndpointDto>> {
     if ids.is_empty() {

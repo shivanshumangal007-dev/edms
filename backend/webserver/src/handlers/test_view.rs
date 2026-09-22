@@ -28,9 +28,15 @@ pub async fn ws_load_endpoints(ws: WebSocketUpgrade, State(state): State<AppStat
     })
 }
 
-pub async fn ws_load_bookmarks(ws: WebSocketUpgrade, State(state): State<AppState>) -> impl IntoResponse {
+/// GET /test-view/:collection/bookmarks/load — collection-scoped, unlike
+/// the old parameter-less version that read `state.active_collection`.
+pub async fn ws_load_bookmarks(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    Path(collection): Path<String>,
+) -> impl IntoResponse {
     ws.on_upgrade(move |socket| async move {
-        handle_ws_subscribe_bookmarks(socket, state).await;
+        handle_ws_subscribe_bookmarks(socket, state, collection).await;
     })
 }
 
@@ -126,23 +132,26 @@ pub async fn save_history(
     }
 }
 
+/// POST /test-view/save/bookmark — body now requires `collection` too,
+/// since there's no more implicit "the loaded one" to fall back to.
 pub async fn save_bookmark(
     State(state): State<AppState>,
     Json(payload): Json<Value>,
 ) -> (StatusCode, Json<serde_json::Value>) {
-    // Per Mathew (2026-09-08): bookmarking requires a collection to
-    // already be loaded — "active" is the draft state of whichever
-    // collection that is, not a free-floating staging area.
-    if let Err((status, body)) = crate::handlers::bookmarks::require_active_collection(&state).await {
-        return (status, body);
+    let collection = payload["collection"].as_str().unwrap_or("").to_string();
+    if collection.is_empty() {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({ "ok": false, "error": "collection is required" })),
+        );
     }
-
     let endpoint_id = payload["endpoint_id"].as_str().unwrap_or("").to_string();
     let notes = payload.get("notes").and_then(|v| v.as_str()).map(|s| s.to_string());
 
     let res = tokio::task::spawn_blocking({
         let st = state.clone();
-        move || db::insert_bookmark_active(&st.core, &st.queries, &endpoint_id, notes.as_deref())
+        let collection = collection.clone();
+        move || db::insert_bookmark(&st.core, &st.queries, &endpoint_id, &collection, notes.as_deref())
     })
     .await;
 
@@ -150,14 +159,15 @@ pub async fn save_bookmark(
         Ok(Ok(_)) => {
             let count = tokio::task::spawn_blocking({
                 let st = state.clone();
-                move || db::bookmarks_count_active(&st.core, &st.queries)
+                let collection = collection.clone();
+                move || db::bookmarks_count(&st.core, &st.queries, &collection)
             })
             .await
             .unwrap_or(Ok(0))
             .unwrap_or(0);
 
             state.refresh_dashboard_snapshot();
-            state.emit(ServerEvent::BookmarksUpdated { count }).await;
+            state.emit(ServerEvent::BookmarksUpdated { collection, count }).await;
             (StatusCode::OK, Json(json!({ "ok": true, "bookmark_count": count })))
         }
         Ok(Err(e)) => (
@@ -214,17 +224,22 @@ pub async fn clear_history(State(state): State<AppState>) -> (StatusCode, Json<s
     }
 }
 
-pub async fn clear_bookmarks(State(state): State<AppState>) -> (StatusCode, Json<serde_json::Value>) {
+/// POST /test-view/:collection/bookmark/clearall
+pub async fn clear_bookmarks(
+    State(state): State<AppState>,
+    Path(collection): Path<String>,
+) -> (StatusCode, Json<serde_json::Value>) {
     let res = tokio::task::spawn_blocking({
         let st = state.clone();
-        move || db::clear_bookmarks_active(&st.core, &st.queries)
+        let collection = collection.clone();
+        move || db::delete_bookmarks_for_folder(&st.core, &st.queries, &collection)
     })
     .await;
 
     match res {
         Ok(Ok(_)) => {
             state.refresh_dashboard_snapshot();
-            state.emit(ServerEvent::BookmarksUpdated { count: 0 }).await;
+            state.emit(ServerEvent::BookmarksUpdated { collection, count: 0 }).await;
             (StatusCode::OK, Json(json!({ "ok": true })))
         }
         Ok(Err(e)) => (
@@ -484,37 +499,32 @@ async fn handle_ws_subscribe_endpoints(mut socket: WebSocket, state: AppState) {
     }
 }
 
-async fn handle_ws_subscribe_bookmarks(mut socket: WebSocket, state: AppState) {
-    let active_collection = state.active_collection.read().await.clone();
-
-    // Per Mathew (2026-09-08): loading a collection copies/resolves full
-    // endpoint data into bookmark view, not just EIDs — endpoints_for_ids
-    // already does that join. What's new here is also marking, per
-    // endpoint, whether it's currently a *saved member* of the loaded
-    // collection (vs. just bookmarked-but-not-yet-saved) — computed by
-    // cross-referencing against the collection's own membership set, never
-    // stored redundantly in the bookmarks table itself.
+/// Collection-scoped now, unlike the old version that read
+/// `state.active_collection` — `collection` is always known (it's the
+/// path param), so there's no more `Option`/`None` branch to handle.
+async fn handle_ws_subscribe_bookmarks(mut socket: WebSocket, state: AppState, collection: String) {
+    // Per Mathew (2026-09-08): bookmark view resolves full endpoint data,
+    // not just EIDs — endpoints_for_ids already does that join. What's
+    // here is also marking, per endpoint, whether it's currently a *saved
+    // member* of this collection (vs. just bookmarked-but-not-yet-saved) —
+    // computed by cross-referencing against the collection's own
+    // membership set, never stored redundantly in the bookmarks table.
     let bookmarks = tokio::task::spawn_blocking({
         let st = state.clone();
-        let active_collection = active_collection.clone();
+        let collection = collection.clone();
         move || {
             let ids_with_timestamps =
-                db::list_bookmarked_endpoints_active_with_timestamps(&st.core, &st.queries)?;
+                db::list_bookmarked_endpoints_with_timestamps(&st.core, &st.queries, &collection)?;
             let ids: Vec<String> = ids_with_timestamps.iter().map(|(id, _)| id.clone()).collect();
             let endpoints = db::endpoints_for_ids(&st.core, &st.queries, &ids)?;
             let updated_at: std::collections::HashMap<String, String> =
                 ids_with_timestamps.into_iter().collect();
 
-            let member_set = match &active_collection {
-                Some(name) => {
-                    match crate::handlers::view_catalog::open_existing_collection_membership(&st, name)
-                        .and_then(|m| m.list_set().map_err(|e| format!("{e:?}")))
-                    {
-                        Ok(set) => set,
-                        Err(_) => std::collections::HashSet::new(),
-                    }
-                }
-                None => std::collections::HashSet::new(),
+            let member_set = match crate::handlers::view_catalog::open_existing_collection_membership(&st, &collection)
+                .and_then(|m| m.list_set().map_err(|e| format!("{e:?}")))
+            {
+                Ok(set) => set,
+                Err(_) => std::collections::HashSet::new(),
             };
 
             Ok::<_, EdmsError>((endpoints, member_set, updated_at))
@@ -547,13 +557,17 @@ async fn handle_ws_subscribe_bookmarks(mut socket: WebSocket, state: AppState) {
         let count = enriched.len();
         let resp = json!({
             "type": "snapshot",
-            "active_collection": active_collection,
+            "collection": collection,
             "bookmarks": enriched
         });
         let _ = socket.send(Message::Text(resp.to_string())).await;
         let _ = state.events_tx.send(ServerEvent::ActiveWorkspaceBookmarksLoaded { count });
     }
 
+    // Forward every event on the shared channel — same pattern every other
+    // subscribe-style WS route in this codebase uses. BookmarksUpdated and
+    // CollectionMembershipUpdated both carry `collection`, so the client
+    // filters to events about this one and ignores the rest.
     let mut rx = state.events_tx.subscribe();
     while let Ok(evt) = rx.recv().await {
         let msg = json!({ "type": "event", "event": evt });
@@ -587,24 +601,11 @@ async fn handle_ws_subscribe_history(mut socket: WebSocket, state: AppState) {
     }
 }
 
-/// Maps the public-facing "active" alias used in `:bookmark` path params
-/// to the internal ACTIVE_FOLDER constant ("__active__"). Without this,
-/// `/test-view/active/add|delete` silently wrote to/deleted from a
-/// literal folder named "active" — a completely different, nonexistent
-/// row from what save_bookmark/bookmarks/load actually use — so deletes
-/// always matched 0 rows and reported success while doing nothing.
-/// Confirmed 2026-09-08 during end-to-end testing; pre-existing, not
-/// introduced by the bookmark/collection merge work.
-fn resolve_folder_alias(bookmark: &str) -> String {
-    if bookmark == "active" {
-        db::ACTIVE_FOLDER.to_string()
-    } else {
-        bookmark.to_string()
-    }
-}
-
+/// `bookmark` is now always a real collection name, taken directly from
+/// the path — no more "active" alias to resolve, and no more gate to
+/// check, since bookmarking into a named collection never requires
+/// anything to be "loaded" first (2026-09-22).
 async fn handle_ws_add_from_history(mut socket: WebSocket, state: AppState, bookmark: String) {
-    let bookmark = resolve_folder_alias(&bookmark);
     while let Some(Ok(msg)) = socket.recv().await {
         let text = match msg {
             Message::Text(t) => t,
@@ -615,16 +616,6 @@ async fn handle_ws_add_from_history(mut socket: WebSocket, state: AppState, book
             Ok(v) => v["endpoint_id"].as_str().unwrap_or("").to_string(),
             Err(_) => text.trim().to_string(),
         };
-
-        // Same gate as save_bookmark, only for the "active" workspace —
-        // other named folders are legacy/unused surface this pass doesn't
-        // otherwise touch.
-        if bookmark == db::ACTIVE_FOLDER {
-            if let Err((_, body)) = crate::handlers::bookmarks::require_active_collection(&state).await {
-                let _ = socket.send(Message::Text(body.0.to_string())).await;
-                continue;
-            }
-        }
 
         let res = tokio::task::spawn_blocking({
             let st = state.clone();
@@ -646,7 +637,9 @@ async fn handle_ws_add_from_history(mut socket: WebSocket, state: AppState, book
                 .unwrap_or(0);
 
                 state.refresh_dashboard_snapshot();
-                state.emit(ServerEvent::BookmarksUpdated { count }).await;
+                state
+                    .emit(ServerEvent::BookmarksUpdated { collection: bookmark.clone(), count })
+                    .await;
                 let resp = json!({ "type": "ok", "bookmark_count": count });
                 let _ = socket.send(Message::Text(resp.to_string())).await;
             }
@@ -659,7 +652,6 @@ async fn handle_ws_add_from_history(mut socket: WebSocket, state: AppState, book
 }
 
 async fn handle_ws_delete_from_bookmark(mut socket: WebSocket, state: AppState, bookmark: String) {
-    let bookmark = resolve_folder_alias(&bookmark);
     while let Some(Ok(msg)) = socket.recv().await {
         let text = match msg {
             Message::Text(t) => t,
@@ -691,7 +683,9 @@ async fn handle_ws_delete_from_bookmark(mut socket: WebSocket, state: AppState, 
                 .unwrap_or(0);
 
                 state.refresh_dashboard_snapshot();
-                state.emit(ServerEvent::BookmarksUpdated { count }).await;
+                state
+                    .emit(ServerEvent::BookmarksUpdated { collection: bookmark.clone(), count })
+                    .await;
                 let resp = json!({ "type": "ok", "bookmark_count": count });
                 let _ = socket.send(Message::Text(resp.to_string())).await;
             }

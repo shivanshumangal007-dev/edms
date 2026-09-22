@@ -212,6 +212,14 @@ pub async fn delete_endpoint(
     match db::delete_endpoint(&state.core, &state.queries, &endpoint_id) {
         Ok(rows) if rows > 0 => {
             let _ = state.eid_allocator.release(&endpoint_id);
+            // Bookmarks aren't scoped to one collection's file — they live
+            // in the central table across every collection the endpoint
+            // was bookmarked into, so deleting the endpoint needs its own
+            // cascade or they'd be orphaned, referencing a dead endpoint
+            // forever (2026-09-22). Collection membership/tags in each
+            // collection's own file are a separate, pre-existing gap this
+            // doesn't touch (see Known limitations).
+            let _ = db::delete_bookmarks_for_endpoint(&state.core, &state.queries, &endpoint_id);
             state.refresh_dashboard_snapshot();
 
             (
