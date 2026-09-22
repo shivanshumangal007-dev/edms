@@ -3444,6 +3444,7 @@ function applyTestFilters() {
                      * (when the page was opened via ?collection=).
                      */
                     if (
+                        activeSidebarTab !== "history" &&
                         activeCollectionEndpointIds !== null
                     ) {
 
