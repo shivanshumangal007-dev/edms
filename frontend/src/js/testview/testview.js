@@ -737,18 +737,31 @@ function loadEndpointsFromBackend() {
                                     normalizeBackendEndpoint
                                 );
 
+                            const wasFinished = finished;
                             finished = true;
 
                             console.log(
                                 `Loaded ${endpoints.length} endpoints from backend.`
                             );
 
-                            resolve();
+                            if (!wasFinished) {
+                                resolve();
+                            } else {
+                                applyTestFilters();
+                            }
 
-                            try {
-                                ws.close();
-                            } catch {}
-
+                        } else if (message.type === "event" && message.event) {
+                            const evtType = message.event.type;
+                            if (
+                                evtType === "CrudOperationsUpdated" ||
+                                evtType === "EndpointAnnotationUpdated" ||
+                                evtType === "CollectionLoaded" ||
+                                evtType === "ViewRefresh"
+                            ) {
+                                try { ws.close(); } catch {}
+                                setTimeout(() => loadEndpointsFromBackend().then(() => applyTestFilters()), 0);
+                                return;
+                            }
                         }
 
                     } catch (error) {
@@ -926,18 +939,30 @@ function loadBookmarksFromBackend() {
                             bookmarks =
                                 message.bookmarks;
 
+                            const wasFinished = finished;
                             finished = true;
 
                             console.log(
                                 `Loaded ${bookmarks.length} active bookmarks from backend.`
                             );
 
-                            resolve();
+                            if (!wasFinished) {
+                                resolve();
+                            } else {
+                                applyTestFilters();
+                            }
 
-                            try {
-                                ws.close();
-                            } catch {}
-
+                        } else if (message.type === "event" && message.event) {
+                            const evtType = message.event.type;
+                            if (
+                                evtType === "BookmarksUpdated" ||
+                                evtType === "CollectionLoaded" ||
+                                evtType === "ViewRefresh"
+                            ) {
+                                try { ws.close(); } catch {}
+                                setTimeout(() => loadBookmarksFromBackend().then(() => applyTestFilters()), 0);
+                                return;
+                            }
                         }
 
                     } catch (error) {
@@ -1053,18 +1078,29 @@ function loadHistoryFromBackend() {
                                     })
                                 );
 
+                            const wasFinished = finished;
                             finished = true;
 
                             console.log(
                                 `Loaded ${historyRecords.length} history records from backend.`
                             );
 
-                            resolve();
+                            if (!wasFinished) {
+                                resolve();
+                            } else {
+                                applyTestFilters();
+                            }
 
-                            try {
-                                ws.close();
-                            } catch {}
-
+                        } else if (message.type === "event" && message.event) {
+                            const evtType = message.event.type;
+                            if (
+                                evtType === "HistoryUpdated" ||
+                                evtType === "ViewRefresh"
+                            ) {
+                                try { ws.close(); } catch {}
+                                setTimeout(() => loadHistoryFromBackend().then(() => applyTestFilters()), 0);
+                                return;
+                            }
                         }
 
                     } catch (error) {
