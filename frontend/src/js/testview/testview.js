@@ -81,8 +81,8 @@ const endpointPath =
 const runButton =
     document.getElementById("runRequest");
 
-const stopButton =
-    document.getElementById("stopRequest");
+const saveButton =
+    document.getElementById("saveRequest");
 
 const annotationInput =
     document.getElementById("annotations");
@@ -3585,26 +3585,31 @@ function setupRunner() {
                 event.preventDefault();
                 event.stopPropagation();
 
-                runTestEndpoint();
+                if (runButton.dataset.running === "true") {
+                    stopTestEndpoint();
+                } else {
+                    runTestEndpoint();
+                }
 
             }
         );
 
     }
 
-    if (stopButton) {
+    if (saveButton) {
 
-        stopButton.type =
+        saveButton.type =
             "button";
 
-        stopButton.addEventListener(
+        saveButton.addEventListener(
             "click",
             event => {
 
                 event.preventDefault();
                 event.stopPropagation();
 
-                stopTestEndpoint();
+                // To be implemented or linked to save logic
+                console.log("Save clicked");
 
             }
         );
@@ -5074,18 +5079,32 @@ function setRunButtonState(
 
     if (!runButton) return;
 
-    runButton.disabled =
-        isRunning;
+    runButton.dataset.running = isRunning ? "true" : "false";
 
-    runButton.classList.toggle(
-        "opacity-50",
-        isRunning
-    );
+    const runIconContainer = document.getElementById("runIconContainer");
+    const runText = document.getElementById("runText");
 
-    runButton.classList.toggle(
-        "cursor-not-allowed",
-        isRunning
-    );
+    if (isRunning) {
+        runButton.className = "h-8 shrink-0 px-4 flex items-center gap-1.5 rounded-lg border border-red-500/40 bg-transparent text-red-400 font-semibold text-sm transition hover:bg-red-500/10 active:scale-95";
+        
+        if (runIconContainer) {
+            runIconContainer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5"><rect x="4" y="4" width="16" height="16" rx="2"></rect></svg>`;
+        }
+        
+        if (runText) {
+            runText.textContent = "Stop";
+        }
+    } else {
+        runButton.className = "h-8 shrink-0 px-4 flex items-center gap-1.5 rounded-lg bg-cyan-500 text-slate-950 font-semibold text-sm transition hover:bg-cyan-400 active:scale-95 shadow-md shadow-cyan-500/20";
+        
+        if (runIconContainer) {
+            runIconContainer.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-4 h-4"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg>`;
+        }
+        
+        if (runText) {
+            runText.textContent = "Run";
+        }
+    }
 
 }
 
