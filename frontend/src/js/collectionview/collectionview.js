@@ -61,6 +61,36 @@
     renderSidebar();
 
     applyFilters();
+
+    if (typeof TagManager !== "undefined") {
+      TagManager.init({
+        view: "collectionview",
+        getItems: () => state.selected.size > 0 
+          ? state.folders.filter(f => state.selected.has(Number(f.id))) 
+          : state.folders,
+        getTags: folder => Array.isArray(folder.tags) ? folder.tags : [],
+        setTags: (folder, tags) => {
+          folder.tags = tags;
+        },
+        addTag: async (folder, tag) => {
+          const api = window.EdmsAPI;
+          if (!api || typeof api.addMembershipTag !== "function") return;
+          await api.addMembershipTag(folder.name, tag);
+          if (!Array.isArray(folder.tags)) folder.tags = [];
+          if (!folder.tags.includes(tag)) folder.tags.push(tag);
+        },
+        removeTag: async (folder, tag) => {
+          const api = window.EdmsAPI;
+          if (!api || typeof api.removeMembershipTag !== "function") return;
+          await api.removeMembershipTag(folder.name, tag);
+          folder.tags = Array.isArray(folder.tags) ? folder.tags.filter(item => item !== tag) : [];
+        },
+        onChange: () => {
+          renderSidebar();
+          applyFilters();
+        }
+      });
+    }
   }
 
   // ============================================================

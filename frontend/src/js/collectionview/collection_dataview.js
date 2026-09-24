@@ -1,378 +1,312 @@
 (() => {
+  "use strict";
 
-    'use strict';
+  // ============================================================
+  // CONFIG
+  // ============================================================
 
+  const DATA_URL = "../data/collections.json";
 
-    // ============================================================
-    // CONFIG
-    // ============================================================
+  const PAGE_SIZE = 10;
 
-    const DATA_URL =
-        '../data/collections.json';
+  // ============================================================
+  // STATE
+  // ============================================================
 
+  const state = {
+    collection: null,
 
-    const PAGE_SIZE =
-        10;
+    endpoints: [],
 
+    filtered: [],
 
-    // ============================================================
-    // STATE
-    // ============================================================
+    page: 1,
 
-    const state = {
+    search: "",
 
-        collection: null,
+    method: "all",
 
-        endpoints: [],
+    tag: "",
 
-        filtered: [],
+    selected: new Set(),
 
-        page: 1,
+    selectedEndpoint: null,
+  };
 
-        search: '',
+  // ============================================================
+  // INIT
+  // ============================================================
 
-        method: 'all',
+  document.addEventListener("DOMContentLoaded", init);
 
-        tag: '',
+  async function init() {
+    wireNavigation();
 
-        selected: new Set(),
+    wireToolbar();
 
-        selectedEndpoint: null
+    wireTable();
 
-    };
+    wireWindows();
 
+    await loadCollection();
 
-    // ============================================================
-    // INIT
-    // ============================================================
-
-    document.addEventListener(
-        'DOMContentLoaded',
-        init
-    );
-
-
-    async function init() {
-
-        wireNavigation();
-
-        wireToolbar();
-
-        wireTable();
-
-        wireWindows();
-
-        await loadCollection();
-
-    }
-
-
-    // ============================================================
-    // LOAD COLLECTION
-    // ============================================================
-
-    async function loadCollection() {
-
-        const params =
-            new URLSearchParams(
-                window.location.search
-            );
-
-
-        const folderId =
-            params.get(
-                'folder'
-            );
-
-
-        if (!folderId) {
-
-            renderError(
-                'No collection was selected.'
-            );
-
+    if (typeof TagManager !== "undefined") {
+      TagManager.init({
+        view: "dataview",
+        getItems: () =>
+          state.selected.size > 0
+            ? state.endpoints.filter((ep) =>
+                state.selected.has(getEndpointId(ep)),
+              )
+            : state.endpoints,
+        getTags: (endpoint) =>
+          Array.isArray(endpoint.tags) ? endpoint.tags : [],
+        setTags: (endpoint, tags) => {
+          endpoint.tags = tags;
+        },
+        addTag: async (endpoint, tag) => {
+          if (
+            !window.EdmsAPI ||
+            typeof window.EdmsAPI.addEndpointTag !== "function"
+          )
             return;
+          await window.EdmsAPI.addEndpointTag(getEndpointId(endpoint), tag);
+          if (!Array.isArray(endpoint.tags)) endpoint.tags = [];
+          if (!endpoint.tags.includes(tag)) endpoint.tags.push(tag);
+        },
+        removeTag: async (endpoint, tag) => {
+          if (
+            !window.EdmsAPI ||
+            typeof window.EdmsAPI.removeEndpointTag !== "function"
+          )
+            return;
+          await window.EdmsAPI.removeEndpointTag(getEndpointId(endpoint), tag);
+          endpoint.tags = Array.isArray(endpoint.tags)
+            ? endpoint.tags.filter((item) => item !== tag)
+            : [];
+        },
+        onChange: () => {
+          render();
+        },
+      });
+    }
+  }
 
-        }
+  // ============================================================
+  // LOAD COLLECTION
+  // ============================================================
 
+  async function loadCollection() {
+    const params = new URLSearchParams(window.location.search);
 
+    const folderId = params.get("folder");
+
+    if (!folderId) {
+      renderError("No collection was selected.");
+
+      return;
+    }
+
+    try {
+      const api = window.EdmsAPI;
+      if (!api) {
+        throw new Error("API not loaded");
+      }
+
+      const collectionResponse = await api.getCollection(folderId);
+      if (!collectionResponse || collectionResponse.ok === false) {
+        renderError("The requested collection could not be found.");
+        return;
+      }
+      const colData = collectionResponse.data ?? collectionResponse;
+      state.collection = colData.collection ?? colData;
+
+      const endpointsResponse = await api.listCollectionEndpoints(folderId);
+      let endpointsList = [];
+      if (endpointsResponse && endpointsResponse.ok !== false) {
+        const epData = endpointsResponse.data ?? endpointsResponse;
+        endpointsList = Array.isArray(epData)
+          ? epData
+          : Array.isArray(epData?.endpoints)
+            ? epData.endpoints
+            : Array.isArray(epData?.items)
+              ? epData.items
+              : [];
+      }
+      state.collection.endpoints = endpointsList;
+
+      const metadataMap = new Map();
+      await new Promise((resolve) => {
+        let socket;
+        let resolved = false;
+        const finish = () => {
+          if (resolved) return;
+          resolved = true;
+          if (socket) socket.close();
+          resolve();
+        };
+        const timeout = setTimeout(finish, 5000);
         try {
-            const api = window.EdmsAPI;
-            if (!api) {
-                throw new Error("API not loaded");
-            }
-
-            const collectionResponse = await api.getCollection(folderId);
-            if (!collectionResponse || collectionResponse.ok === false) {
-                renderError('The requested collection could not be found.');
-                return;
-            }
-            const colData = collectionResponse.data ?? collectionResponse;
-            state.collection = colData.collection ?? colData;
-
-            const endpointsResponse = await api.listCollectionEndpoints(folderId);
-            let endpointsList = [];
-            if (endpointsResponse && endpointsResponse.ok !== false) {
-                const epData = endpointsResponse.data ?? endpointsResponse;
-                endpointsList = Array.isArray(epData) 
-                    ? epData 
-                    : (Array.isArray(epData?.endpoints) 
-                        ? epData.endpoints 
-                        : (Array.isArray(epData?.items) ? epData.items : []));
-            }
-            state.collection.endpoints = endpointsList;
-
-            const metadataMap = new Map();
-            await new Promise((resolve) => {
-                let socket;
-                let resolved = false;
-                const finish = () => {
-                    if (resolved) return;
-                    resolved = true;
-                    if (socket) socket.close();
-                    resolve();
-                };
-                const timeout = setTimeout(finish, 5000);
-                try {
-                    socket = api.connectEndpointLoader();
-                    if (!socket) {
-                        clearTimeout(timeout);
-                        return finish();
-                    }
-                    socket.onmessage = (event) => {
-                        try {
-                            const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-                            function collect(val) {
-                                if (!val) return;
-                                if (Array.isArray(val)) { val.forEach(collect); return; }
-                                if (typeof val !== 'object') return;
-                                const eid = val.endpoint_id ?? val.id;
-                                if (eid) {
-                                    metadataMap.set(String(eid), val);
-                                }
-                                Object.values(val).forEach(collect);
-                            }
-                            collect(message);
-                            if (metadataMap.size > 0) {
-                                clearTimeout(timeout);
-                                finish();
-                            }
-                        } catch (e) {
-                            console.error("Error parsing websocket message", e);
-                        }
-                    };
-                    socket.onerror = () => {
-                        clearTimeout(timeout);
-                        finish();
-                    };
-                    socket.onclose = () => {
-                        clearTimeout(timeout);
-                        finish();
-                    };
-                } catch (e) {
-                    clearTimeout(timeout);
-                    finish();
+          socket = api.connectEndpointLoader();
+          if (!socket) {
+            clearTimeout(timeout);
+            return finish();
+          }
+          socket.onmessage = (event) => {
+            try {
+              const message =
+                typeof event.data === "string"
+                  ? JSON.parse(event.data)
+                  : event.data;
+              function collect(val) {
+                if (!val) return;
+                if (Array.isArray(val)) {
+                  val.forEach(collect);
+                  return;
                 }
-            });
-
-            state.endpoints = state.collection.endpoints.map(endpoint => {
-                const eid = String(endpoint.endpoint_id ?? endpoint.id ?? '');
-                const info = metadataMap.get(eid) || {};
-                return {
-                    ...endpoint,
-                    endpoint: info.endpoint_str ?? endpoint.endpoint ?? '',
-                    endpoint_str: info.endpoint_str ?? endpoint.endpoint_str ?? '',
-                    annotation: info.annotation ?? endpoint.annotation,
-                    method: info.method ?? endpoint.method ?? '',
-                    tags: Array.isArray(info.tags) ? info.tags : []
-                };
-            });
-
-            state.filtered = [...state.endpoints];
-
-            renderCollectionInfo();
-            renderTagFilter();
-            renderStats();
-            render();
-        } catch (error) {
-            console.error('Failed to load collection:', error);
-            renderError('Unable to load collection data.');
+                if (typeof val !== "object") return;
+                const eid = val.endpoint_id ?? val.id;
+                if (eid) {
+                  metadataMap.set(String(eid), val);
+                }
+                Object.values(val).forEach(collect);
+              }
+              collect(message);
+              if (metadataMap.size > 0) {
+                clearTimeout(timeout);
+                finish();
+              }
+            } catch (e) {
+              console.error("Error parsing websocket message", e);
+            }
+          };
+          socket.onerror = () => {
+            clearTimeout(timeout);
+            finish();
+          };
+          socket.onclose = () => {
+            clearTimeout(timeout);
+            finish();
+          };
+        } catch (e) {
+          clearTimeout(timeout);
+          finish();
         }
-    }
+      });
 
+      state.endpoints = state.collection.endpoints.map((endpoint) => {
+        const eid = String(endpoint.endpoint_id ?? endpoint.id ?? "");
+        const info = metadataMap.get(eid) || {};
+        return {
+          ...endpoint,
+          endpoint: info.endpoint_str ?? endpoint.endpoint ?? "",
+          endpoint_str: info.endpoint_str ?? endpoint.endpoint_str ?? "",
+          annotation: info.annotation ?? endpoint.annotation,
+          method: info.method ?? endpoint.method ?? "",
+          tags: Array.isArray(info.tags) ? info.tags : (Array.isArray(endpoint.tags) ? endpoint.tags : []),
+        };
+      });
 
-    // ============================================================
-    // FILTERING
-    // ============================================================
-
-    function applyFilters() {
-
-        const term =
-            state.search
-                .trim()
-                .toLowerCase();
-
-
-        state.filtered =
-            state.endpoints.filter(
-                endpoint => {
-
-                    const path =
-                        String(
-                            endpoint.endpoint ||
-                            ''
-                        );
-
-
-                    const method =
-                        String(
-                            endpoint.method ||
-                            ''
-                        ).toUpperCase();
-
-
-                    const annotation =
-                        String(
-                            endpoint.annotation ||
-                            ''
-                        );
-
-
-                    const tags =
-                        Array.isArray(
-                            endpoint.tags
-                        )
-                            ? endpoint.tags
-                            : [];
-
-
-                    const matchesSearch =
-                        !term ||
-
-                        path
-                            .toLowerCase()
-                            .includes(term) ||
-
-                        method
-                            .toLowerCase()
-                            .includes(term) ||
-
-                        annotation
-                            .toLowerCase()
-                            .includes(term) ||
-
-                        tags.some(
-                            tag =>
-                                String(tag)
-                                    .toLowerCase()
-                                    .includes(term)
-                        );
-
-
-                    const matchesMethod =
-                        state.method ===
-                            'all' ||
-
-                        method ===
-                            state.method;
-
-
-                    const matchesTag =
-                        !state.tag ||
-
-                        tags.includes(
-                            state.tag
-                        );
-
-
-                    return (
-                        matchesSearch &&
-                        matchesMethod &&
-                        matchesTag
-                    );
-
-                }
-            );
-
-
-        state.page =
-            Math.min(
-                state.page,
-                getTotalPages()
-            );
-
-
-        render();
-
-    }
-
-
-    function getTotalPages() {
-
-        return Math.max(
-            1,
-            Math.ceil(
-                state.filtered.length /
-                PAGE_SIZE
-            )
+      if (window.EdmsAPI && typeof window.EdmsAPI.listEndpointTags === "function") {
+        await Promise.all(
+          state.endpoints.map(async (endpoint) => {
+            try {
+              const res = await window.EdmsAPI.listEndpointTags(getEndpointId(endpoint));
+              const data = res?.data ?? res;
+              if (data && Array.isArray(data.tags)) {
+                endpoint.tags = data.tags;
+              } else if (Array.isArray(data)) {
+                endpoint.tags = data;
+              }
+            } catch (e) {
+              console.error("Failed to load tags for", getEndpointId(endpoint), e);
+            }
+          })
         );
+      }
 
+      state.filtered = [...state.endpoints];
+
+      renderCollectionInfo();
+      renderTagFilter();
+      renderStats();
+      render();
+    } catch (error) {
+      console.error("Failed to load collection:", error);
+      renderError("Unable to load collection data.");
     }
+  }
 
+  // ============================================================
+  // FILTERING
+  // ============================================================
 
-    function getPageItems() {
+  function applyFilters() {
+    const term = state.search.trim().toLowerCase();
 
-        const start =
-            (state.page - 1) *
-            PAGE_SIZE;
+    state.filtered = state.endpoints.filter((endpoint) => {
+      const path = String(endpoint.endpoint || "");
 
+      const method = String(endpoint.method || "").toUpperCase();
 
-        return state.filtered.slice(
-            start,
-            start + PAGE_SIZE
-        );
+      const annotation = String(endpoint.annotation || "");
 
-    }
+      const tags = Array.isArray(endpoint.tags) ? endpoint.tags : [];
 
+      const matchesSearch =
+        !term ||
+        path.toLowerCase().includes(term) ||
+        method.toLowerCase().includes(term) ||
+        annotation.toLowerCase().includes(term) ||
+        tags.some((tag) => String(tag).toLowerCase().includes(term));
 
-    // ============================================================
-    // RENDER
-    // ============================================================
+      const matchesMethod = state.method === "all" || method === state.method;
 
-    function render() {
+      const matchesTag = !state.tag || tags.includes(state.tag);
 
-        renderTable();
+      return matchesSearch && matchesMethod && matchesTag;
+    });
 
-        renderPagination();
+    state.page = Math.min(state.page, getTotalPages());
 
-        updateSelectionUI();
+    render();
+  }
 
-    }
+  function getTotalPages() {
+    return Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
+  }
 
+  function getPageItems() {
+    const start = (state.page - 1) * PAGE_SIZE;
 
-    // ============================================================
-    // TABLE
-    // ============================================================
+    return state.filtered.slice(start, start + PAGE_SIZE);
+  }
 
-    function renderTable() {
+  // ============================================================
+  // RENDER
+  // ============================================================
 
-        const tbody =
-            document.getElementById(
-                'endpointTableBody'
-            );
+  function render() {
+    renderTable();
 
+    renderPagination();
 
-        tbody.innerHTML =
-            '';
+    updateSelectionUI();
+  }
 
+  // ============================================================
+  // TABLE
+  // ============================================================
 
-        const items =
-            getPageItems();
+  function renderTable() {
+    const tbody = document.getElementById("endpointTableBody");
 
+    tbody.innerHTML = "";
 
-        if (!items.length) {
+    const items = getPageItems();
 
-            tbody.innerHTML = `
+    if (!items.length) {
+      tbody.innerHTML = `
 
                 <tr>
 
@@ -404,97 +338,46 @@
 
             `;
 
-
-            return;
-
-        }
-
-
-        items.forEach(
-            endpoint => {
-
-                const row =
-                    createEndpointRow(
-                        endpoint
-                    );
-
-
-                tbody.appendChild(
-                    row
-                );
-
-            }
-        );
-
-
-        updateSelectAllState();
-
+      return;
     }
 
+    items.forEach((endpoint) => {
+      const row = createEndpointRow(endpoint);
 
-    function createEndpointRow(
-        endpoint
-    ) {
+      tbody.appendChild(row);
+    });
 
-        const row =
-            document.createElement(
-                'tr'
-            );
+    updateSelectAllState();
+  }
 
+  function createEndpointRow(endpoint) {
+    const row = document.createElement("tr");
 
-        const endpointId =
-            getEndpointId(
-                endpoint
-            );
+    const endpointId = getEndpointId(endpoint);
 
+    const selected = state.selected.has(endpointId);
 
-        const selected =
-            state.selected.has(
-                endpointId
-            );
+    const method = String(endpoint.method || "").toUpperCase();
 
+    const tags = Array.isArray(endpoint.tags) ? endpoint.tags : [];
 
-        const method =
-            String(
-                endpoint.method ||
-                ''
-            ).toUpperCase();
+    const annotation = endpoint.annotation || "—";
 
+    row.dataset.id = endpointId;
 
-        const tags =
-            Array.isArray(
-                endpoint.tags
-            )
-                ? endpoint.tags
-                : [];
+    row.className = [
+      "border-b",
+      "border-slate-800",
+      "cursor-pointer",
+      "transition-colors",
+      "hover:bg-slate-800/60",
 
+      selected ? "bg-cyan-500/[0.055]" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
 
-        const annotation =
-            endpoint.annotation ||
-            '—';
-
-
-        row.dataset.id =
-            endpointId;
-
-
-        row.className =
-            [
-                'border-b',
-                'border-slate-800',
-                'cursor-pointer',
-                'transition-colors',
-                'hover:bg-slate-800/60',
-
-                selected
-                    ? 'bg-cyan-500/[0.055]'
-                    : ''
-            ]
-                .filter(Boolean)
-                .join(' ');
-
-
-        row.innerHTML = `
+    row.innerHTML = `
 
             <td class="px-3 py-2">
 
@@ -503,7 +386,7 @@
                     class="endpoint-select
                            h-3.5 w-3.5
                            accent-cyan-400"
-                    ${selected ? 'checked' : ''}
+                    ${selected ? "checked" : ""}
                 >
 
             </td>
@@ -514,7 +397,7 @@
                        font-semibold
                        ${methodClass(method)}"
             >
-                ${escapeHtml(method || '—')}
+                ${escapeHtml(method || "—")}
             </td>
 
 
@@ -530,9 +413,7 @@
                                text-[11px]
                                text-slate-300"
                     >
-                        ${renderEndpointPath(
-                            endpoint.endpoint
-                        )}
+                        ${renderEndpointPath(endpoint.endpoint)}
                     </span>
 
                 </div>
@@ -548,10 +429,10 @@
                 >
 
                     ${
-                        tags.length
-                            ? tags
-                                .map(
-                                    tag => `
+                      tags.length
+                        ? tags
+                            .map(
+                              (tag) => `
 
                                         <button
                                             type="button"
@@ -562,20 +443,15 @@
                                                    text-[10px]
                                                    text-sky-300
                                                    hover:bg-sky-500/20"
-                                            data-tag="${escapeAttr(
-                                                tag
-                                            )}"
+                                            data-tag="${escapeAttr(tag)}"
                                         >
-                                            ${escapeHtml(
-                                                tag
-                                            )}
+                                            ${escapeHtml(tag)}
                                         </button>
 
-                                    `
-                                )
-                                .join('')
-
-                            : `
+                                    `,
+                            )
+                            .join("")
+                        : `
                                 <span
                                     class="text-[10px]
                                            text-slate-600"
@@ -619,560 +495,264 @@
 
                 <span
                     class="line-clamp-2"
-                    title="${escapeAttr(
-                        annotation
-                    )}"
+                    title="${escapeAttr(annotation)}"
                 >
-                    ${escapeHtml(
-                        annotation
-                    )}
+                    ${escapeHtml(annotation)}
                 </span>
 
             </td>
 
         `;
 
+    // --------------------------------------------------------
+    // CHECKBOX
+    // --------------------------------------------------------
 
-        // --------------------------------------------------------
-        // CHECKBOX
-        // --------------------------------------------------------
+    const checkbox = row.querySelector(".endpoint-select");
 
-        const checkbox =
-            row.querySelector(
-                '.endpoint-select'
-            );
+    checkbox.addEventListener("click", (event) => event.stopPropagation());
 
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        state.selected.add(endpointId);
+      } else {
+        state.selected.delete(endpointId);
+      }
 
-        checkbox.addEventListener(
-            'click',
-            event =>
-                event.stopPropagation()
-        );
+      updateSelectionUI();
 
+      updateSelectAllState();
 
-        checkbox.addEventListener(
-            'change',
-            () => {
+      renderTable();
+    });
 
-                if (
-                    checkbox.checked
-                ) {
+    // --------------------------------------------------------
+    // TAG
+    // --------------------------------------------------------
 
-                    state.selected.add(
-                        endpointId
-                    );
+    row.querySelectorAll(".endpoint-tag").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
 
-                } else {
+        state.tag = button.dataset.tag;
 
-                    state.selected.delete(
-                        endpointId
-                    );
+        const select = document.getElementById("tagFilter");
 
-                }
+        select.value = state.tag;
 
+        state.page = 1;
 
-                updateSelectionUI();
+        applyFilters();
+      });
+    });
 
-                updateSelectAllState();
+    // --------------------------------------------------------
+    // ROW CLICK
+    // --------------------------------------------------------
 
-                renderTable();
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button,input")) {
+        return;
+      }
 
-            }
-        );
+      selectEndpoint(endpoint);
+    });
 
+    row.addEventListener("contextmenu", (event) => {
+      event.preventDefault();
+      const id = getEndpointId(endpoint);
+      if (!state.selected.has(id)) {
+        state.selected.clear();
+        state.selected.add(id);
+        updateSelectionUI();
 
-        // --------------------------------------------------------
-        // TAG
-        // --------------------------------------------------------
+        document.querySelectorAll(".endpoint-checkbox").forEach((cb) => {
+          cb.checked = state.selected.has(cb.dataset.id);
+        });
+      }
+      openEndpointContextMenu(event, endpoint);
+    });
 
-        row.querySelectorAll(
-            '.endpoint-tag'
-        ).forEach(
-            button => {
+    return row;
+  }
 
-                button.addEventListener(
-                    'click',
-                    event => {
+  // ============================================================
+  // ENDPOINT SELECTION
+  // ============================================================
 
-                        event.stopPropagation();
+  function selectEndpoint(endpoint) {
+    state.selectedEndpoint = endpoint;
 
+    renderEndpointDetails(endpoint);
 
-                        state.tag =
-                            button.dataset.tag;
+    openWindow("requestWindow");
 
+    openWindow("responseWindow");
 
-                        const select =
-                            document.getElementById(
-                                'tagFilter'
-                            );
+    renderTable();
+  }
 
+  function renderEndpointDetails(endpoint) {
+    const request = endpoint.request || {};
 
-                        select.value =
-                            state.tag;
+    const response = endpoint.response || {};
 
+    document.getElementById("requestHeaders").textContent = formatData(
+      request.headers || {},
+    );
 
-                        state.page =
-                            1;
+    document.getElementById("requestQuery").textContent = formatData(
+      request.query || request.queryParams || {},
+    );
 
+    document.getElementById("requestBody").textContent = formatData(
+      request.body ?? "Not available",
+    );
 
-                        applyFilters();
+    document.getElementById("responseStatus").textContent = response.status
+      ? String(response.status)
+      : "Prototype";
 
-                    }
-                );
+    document.getElementById("responseBody").textContent = formatData(
+      response.body ??
+        response ?? {
+          endpoint: endpoint.endpoint,
 
-            }
-        );
+          message: "No response payload defined.",
+        },
+    );
+  }
 
+  // ============================================================
+  // STATS
+  // ============================================================
 
-        // --------------------------------------------------------
-        // ROW CLICK
-        // --------------------------------------------------------
+  function renderStats() {
+    const endpoints = state.endpoints;
 
-        row.addEventListener(
-            'click',
-            event => {
+    const tags = new Set();
 
-                if (
-                    event.target.closest(
-                        'button,input'
-                    )
-                ) {
+    let get = 0;
 
-                    return;
+    let write = 0;
 
-                }
+    endpoints.forEach((endpoint) => {
+      const method = String(endpoint.method || "").toUpperCase();
 
+      if (method === "GET") {
+        get++;
+      }
 
-                selectEndpoint(
-                    endpoint
-                );
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+        write++;
+      }
 
-            }
-        );
+      const endpointTags = Array.isArray(endpoint.tags) ? endpoint.tags : [];
 
+      endpointTags.forEach((tag) => tags.add(tag));
+    });
 
-        return row;
+    document.getElementById("endpointCount").textContent = endpoints.length;
 
-    }
+    document.getElementById("tagCount").textContent = tags.size;
 
+    document.getElementById("getCount").textContent = get;
 
-    // ============================================================
-    // ENDPOINT SELECTION
-    // ============================================================
+    document.getElementById("writeCount").textContent = write;
+  }
 
-    function selectEndpoint(
-        endpoint
-    ) {
+  function renderCollectionInfo() {
+    const folder = state.collection;
 
-        state.selectedEndpoint =
-            endpoint;
+    document.getElementById("collectionTitle").textContent = folder.name;
 
+    document.getElementById("collectionSubtitle").textContent = [
+      capitalize(folder.purpose),
+      folder.datatype || "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
 
-        renderEndpointDetails(
-            endpoint
-        );
+  // ============================================================
+  // TAG FILTER
+  // ============================================================
 
+  function renderTagFilter() {
+    const select = document.getElementById("tagFilter");
 
-        openWindow(
-            'requestWindow'
-        );
+    const tags = new Set();
 
+    state.endpoints.forEach((endpoint) => {
+      const endpointTags = Array.isArray(endpoint.tags) ? endpoint.tags : [];
 
-        openWindow(
-            'responseWindow'
-        );
+      endpointTags.forEach((tag) => tags.add(tag));
+    });
 
+    select.innerHTML = '<option value="">Tags</option>';
 
-        renderTable();
+    [...tags].sort().forEach((tag) => {
+      const option = document.createElement("option");
 
-    }
+      option.value = tag;
 
+      option.textContent = tag;
 
-    function renderEndpointDetails(
-        endpoint
-    ) {
+      select.appendChild(option);
+    });
+  }
 
-        const request =
-            endpoint.request ||
-            {};
+  // ============================================================
+  // PAGINATION
+  // ============================================================
 
+  function renderPagination() {
+    const total = state.filtered.length;
 
-        const response =
-            endpoint.response ||
-            {};
+    const start = total ? (state.page - 1) * PAGE_SIZE + 1 : 0;
 
+    const end = Math.min(state.page * PAGE_SIZE, total);
 
-        document.getElementById(
-            'requestHeaders'
-        ).textContent =
-            formatData(
-                request.headers ||
-                {}
-            );
+    document.getElementById("rangeStart").textContent = start;
 
+    document.getElementById("rangeEnd").textContent = end;
 
-        document.getElementById(
-            'requestQuery'
-        ).textContent =
-            formatData(
-                request.query ||
-                request.queryParams ||
-                {}
-            );
+    document.getElementById("totalEndpoints").textContent = total;
 
+    const totalPages = getTotalPages();
 
-        document.getElementById(
-            'requestBody'
-        ).textContent =
-            formatData(
-                request.body ??
-                'Not available'
-            );
+    const container = document.getElementById("pageNumbers");
 
+    container.innerHTML = "";
 
-        document.getElementById(
-            'responseStatus'
-        ).textContent =
-            response.status
-                ? String(
-                    response.status
-                )
-                : 'Prototype';
+    getPageRange(state.page, totalPages).forEach((page) => {
+      if (page === "...") {
+        const span = document.createElement("span");
 
+        span.className = "px-1 text-slate-600";
 
-        document.getElementById(
-            'responseBody'
-        ).textContent =
-            formatData(
-                response.body ??
-                response ??
-                {
-                    endpoint:
-                        endpoint.endpoint,
+        span.textContent = "…";
 
-                    message:
-                        'No response payload defined.'
-                }
-            );
+        container.appendChild(span);
 
-    }
+        return;
+      }
 
+      const button = document.createElement("button");
 
-    // ============================================================
-    // STATS
-    // ============================================================
+      button.type = "button";
 
-    function renderStats() {
+      button.textContent = page;
 
-        const endpoints =
-            state.endpoints;
-
-
-        const tags =
-            new Set();
-
-
-        let get =
-            0;
-
-
-        let write =
-            0;
-
-
-        endpoints.forEach(
-            endpoint => {
-
-                const method =
-                    String(
-                        endpoint.method ||
-                        ''
-                    ).toUpperCase();
-
-
-                if (
-                    method ===
-                    'GET'
-                ) {
-
-                    get++;
-
-                }
-
-
-                if (
-                    [
-                        'POST',
-                        'PUT',
-                        'PATCH',
-                        'DELETE'
-                    ].includes(
-                        method
-                    )
-                ) {
-
-                    write++;
-
-                }
-
-
-                const endpointTags =
-                    Array.isArray(
-                        endpoint.tags
-                    )
-                        ? endpoint.tags
-                        : [];
-
-
-                endpointTags.forEach(
-                    tag =>
-                        tags.add(tag)
-                );
-
-            }
-        );
-
-
-        document.getElementById(
-            'endpointCount'
-        ).textContent =
-            endpoints.length;
-
-
-        document.getElementById(
-            'tagCount'
-        ).textContent =
-            tags.size;
-
-
-        document.getElementById(
-            'getCount'
-        ).textContent =
-            get;
-
-
-        document.getElementById(
-            'writeCount'
-        ).textContent =
-            write;
-
-    }
-
-
-    function renderCollectionInfo() {
-
-        const folder =
-            state.collection;
-
-
-        document.getElementById(
-            'collectionTitle'
-        ).textContent =
-            folder.name;
-
-
-        document.getElementById(
-            'collectionSubtitle'
-        ).textContent =
-            [
-                capitalize(
-                    folder.purpose
-                ),
-                folder.datatype || ''
-            ]
-                .filter(Boolean)
-                .join(' · ');
-
-    }
-
-
-    // ============================================================
-    // TAG FILTER
-    // ============================================================
-
-    function renderTagFilter() {
-
-        const select =
-            document.getElementById(
-                'tagFilter'
-            );
-
-
-        const tags =
-            new Set();
-
-
-        state.endpoints.forEach(
-            endpoint => {
-
-                const endpointTags =
-                    Array.isArray(
-                        endpoint.tags
-                    )
-                        ? endpoint.tags
-                        : [];
-
-
-                endpointTags.forEach(
-                    tag =>
-                        tags.add(tag)
-                );
-
-            }
-        );
-
-
-        select.innerHTML =
-            '<option value="">Tags</option>';
-
-
-        [...tags]
-            .sort()
-            .forEach(
-                tag => {
-
-                    const option =
-                        document.createElement(
-                            'option'
-                        );
-
-
-                    option.value =
-                        tag;
-
-
-                    option.textContent =
-                        tag;
-
-
-                    select.appendChild(
-                        option
-                    );
-
-                }
-            );
-
-    }
-
-
-    // ============================================================
-    // PAGINATION
-    // ============================================================
-
-    function renderPagination() {
-
-        const total =
-            state.filtered.length;
-
-
-        const start =
-            total
-                ? (
-                    (state.page - 1) *
-                    PAGE_SIZE
-                ) + 1
-                : 0;
-
-
-        const end =
-            Math.min(
-                state.page *
-                    PAGE_SIZE,
-                total
-            );
-
-
-        document.getElementById(
-            'rangeStart'
-        ).textContent =
-            start;
-
-
-        document.getElementById(
-            'rangeEnd'
-        ).textContent =
-            end;
-
-
-        document.getElementById(
-            'totalEndpoints'
-        ).textContent =
-            total;
-
-
-        const totalPages =
-            getTotalPages();
-
-
-        const container =
-            document.getElementById(
-                'pageNumbers'
-            );
-
-
-        container.innerHTML =
-            '';
-
-
-        getPageRange(
-            state.page,
-            totalPages
-        ).forEach(
-            page => {
-
-                if (
-                    page === '...'
-                ) {
-
-                    const span =
-                        document.createElement(
-                            'span'
-                        );
-
-
-                    span.className =
-                        'px-1 text-slate-600';
-
-
-                    span.textContent =
-                        '…';
-
-
-                    container.appendChild(
-                        span
-                    );
-
-
-                    return;
-
-                }
-
-
-                const button =
-                    document.createElement(
-                        'button'
-                    );
-
-
-                button.type =
-                    'button';
-
-
-                button.textContent =
-                    page;
-
-
-                button.className =
-                    page === state.page
-
-                        ? `
+      button.className =
+        page === state.page
+          ? `
                             min-w-7 rounded-md
                             bg-cyan-500
                             px-2 py-1
                             text-[11px] text-white
                           `
-
-                        : `
+          : `
                             min-w-7 rounded-md
                             border border-slate-700
                             px-2 py-1
@@ -1182,572 +762,253 @@
                             hover:text-white
                           `;
 
+      button.addEventListener("click", () => {
+        state.page = page;
 
-                button.addEventListener(
-                    'click',
-                    () => {
+        render();
+      });
 
-                        state.page =
-                            page;
+      container.appendChild(button);
+    });
 
-                        render();
+    document.getElementById("prevPage").disabled = state.page <= 1;
 
-                    }
-                );
+    document.getElementById("nextPage").disabled = state.page >= totalPages;
+  }
 
-
-                container.appendChild(
-                    button
-                );
-
-            }
-        );
-
-
-        document.getElementById(
-            'prevPage'
-        ).disabled =
-            state.page <= 1;
-
-
-        document.getElementById(
-            'nextPage'
-        ).disabled =
-            state.page >= totalPages;
-
+  function getPageRange(current, total) {
+    if (total <= 7) {
+      return Array.from(
+        {
+          length: total,
+        },
+        (_, i) => i + 1,
+      );
     }
 
+    const result = [1];
 
-    function getPageRange(
-        current,
-        total
+    if (current > 4) {
+      result.push("...");
+    }
+
+    for (
+      let page = Math.max(2, current - 1);
+      page <= Math.min(total - 1, current + 1);
+      page++
     ) {
-
-        if (
-            total <= 7
-        ) {
-
-            return Array.from(
-                {
-                    length: total
-                },
-                (_, i) =>
-                    i + 1
-            );
-
-        }
-
-
-        const result = [
-            1
-        ];
-
-
-        if (
-            current > 4
-        ) {
-
-            result.push(
-                '...'
-            );
-
-        }
-
-
-        for (
-            let page =
-                Math.max(
-                    2,
-                    current - 1
-                );
-
-            page <=
-                Math.min(
-                    total - 1,
-                    current + 1
-                );
-
-            page++
-        ) {
-
-            result.push(
-                page
-            );
-
-        }
-
-
-        if (
-            current <
-            total - 3
-        ) {
-
-            result.push(
-                '...'
-            );
-
-        }
-
-
-        result.push(
-            total
-        );
-
-
-        return result;
-
+      result.push(page);
     }
 
-
-    // ============================================================
-    // SELECTION
-    // ============================================================
-
-    function updateSelectionUI() {
-
-        const count =
-            state.selected.size;
-
-
-        const label =
-            document.getElementById(
-                'selectionLabel'
-            );
-
-
-        const clear =
-            document.getElementById(
-                'clearEndpointSelection'
-            );
-
-
-        if (
-            count
-        ) {
-
-            label.textContent =
-                `${count} selected`;
-
-
-            label.classList.remove(
-                'hidden'
-            );
-
-
-            clear.classList.remove(
-                'hidden'
-            );
-
-        } else {
-
-            label.classList.add(
-                'hidden'
-            );
-
-
-            clear.classList.add(
-                'hidden'
-            );
-
-        }
-
-
-        updateSelectAllState();
-
+    if (current < total - 3) {
+      result.push("...");
     }
 
+    result.push(total);
 
-    function updateSelectAllState() {
+    return result;
+  }
 
-        const selectAll =
-            document.getElementById(
-                'selectAllEndpoints'
-            );
+  // ============================================================
+  // SELECTION
+  // ============================================================
 
+  function updateSelectionUI() {
+    const count = state.selected.size;
+    const label = document.getElementById("selectionLabel");
+    const clear = document.getElementById("clearEndpointSelection");
 
-        const items =
-            getPageItems();
+    const tagsBtn = document.getElementById("tagsManager");
+    const deleteBtn = document.getElementById("deleteSelected");
 
-
-        const selectedCount =
-            items.filter(
-                endpoint =>
-                    state.selected.has(
-                        getEndpointId(
-                            endpoint
-                        )
-                    )
-            ).length;
-
-
-        selectAll.checked =
-            items.length > 0 &&
-            selectedCount ===
-                items.length;
-
-
-        selectAll.indeterminate =
-            selectedCount > 0 &&
-            selectedCount <
-                items.length;
-
+    if (count) {
+      label.textContent = `${count} selected`;
+      label.classList.remove("hidden");
+      clear.classList.remove("hidden");
+      if (tagsBtn) tagsBtn.disabled = false;
+      if (deleteBtn) deleteBtn.disabled = false;
+    } else {
+      label.classList.add("hidden");
+      clear.classList.add("hidden");
+      if (tagsBtn) tagsBtn.disabled = true;
+      if (deleteBtn) deleteBtn.disabled = true;
     }
 
+    updateSelectAllState();
+  }
 
-    // ============================================================
-    // TOOLBAR
-    // ============================================================
+  function updateSelectAllState() {
+    const selectAll = document.getElementById("selectAllEndpoints");
 
-    function wireToolbar() {
+    const items = getPageItems();
 
-        document.getElementById(
-            'endpointSearch'
-        ).addEventListener(
-            'input',
-            event => {
+    const selectedCount = items.filter((endpoint) =>
+      state.selected.has(getEndpointId(endpoint)),
+    ).length;
 
-                state.search =
-                    event.target.value;
+    selectAll.checked = items.length > 0 && selectedCount === items.length;
 
+    selectAll.indeterminate = selectedCount > 0 && selectedCount < items.length;
+  }
 
-                state.page =
-                    1;
+  // ============================================================
+  // TOOLBAR
+  // ============================================================
 
+  function wireToolbar() {
+    document
+      .getElementById("endpointSearch")
+      .addEventListener("input", (event) => {
+        state.search = event.target.value;
 
-                applyFilters();
-
-            }
-        );
-
-
-        document.getElementById(
-            'methodFilter'
-        ).addEventListener(
-            'change',
-            event => {
-
-                state.method =
-                    event.target.value;
-
-
-                state.page =
-                    1;
-
-
-                applyFilters();
-
-            }
-        );
-
-
-        document.getElementById(
-            'tagFilter'
-        ).addEventListener(
-            'change',
-            event => {
-
-                state.tag =
-                    event.target.value;
-
-
-                state.page =
-                    1;
-
-
-                applyFilters();
-
-            }
-        );
-
-
-        document.getElementById(
-            'resetEndpointFilters'
-        ).addEventListener(
-            'click',
-            resetFilters
-        );
-
-
-        document.getElementById(
-            'clearEndpointSelection'
-        ).addEventListener(
-            'click',
-            () => {
-
-                state.selected.clear();
-
-                render();
-
-            }
-        );
-
-
-        document.getElementById(
-            'selectAllEndpoints'
-        ).addEventListener(
-            'change',
-            event => {
-
-                getPageItems()
-                    .forEach(
-                        endpoint => {
-
-                            const id =
-                                getEndpointId(
-                                    endpoint
-                                );
-
-
-                            if (
-                                event.target.checked
-                            ) {
-
-                                state.selected.add(
-                                    id
-                                );
-
-                            } else {
-
-                                state.selected.delete(
-                                    id
-                                );
-
-                            }
-
-                        }
-                    );
-
-
-                render();
-
-            }
-        );
-
-
-        document.getElementById(
-            'prevPage'
-        ).addEventListener(
-            'click',
-            () => {
-
-                if (
-                    state.page > 1
-                ) {
-
-                    state.page--;
-
-                    render();
-
-                }
-
-            }
-        );
-
-
-        document.getElementById(
-            'nextPage'
-        ).addEventListener(
-            'click',
-            () => {
-
-                if (
-                    state.page <
-                    getTotalPages()
-                ) {
-
-                    state.page++;
-
-                    render();
-
-                }
-
-            }
-        );
-
-    }
-
-
-    function resetFilters() {
-
-        state.search =
-            '';
-
-        state.method =
-            'all';
-
-        state.tag =
-            '';
-
-        state.page =
-            1;
-
-
-        document.getElementById(
-            'endpointSearch'
-        ).value =
-            '';
-
-
-        document.getElementById(
-            'methodFilter'
-        ).value =
-            'all';
-
-
-        document.getElementById(
-            'tagFilter'
-        ).value =
-            '';
-
+        state.page = 1;
 
         applyFilters();
+      });
 
-    }
+    document
+      .getElementById("methodFilter")
+      .addEventListener("change", (event) => {
+        state.method = event.target.value;
 
+        state.page = 1;
 
-    // ============================================================
-    // TABLE
-    // ============================================================
+        applyFilters();
+      });
 
-    function wireTable() {
+    document.getElementById("tagFilter").addEventListener("change", (event) => {
+      state.tag = event.target.value;
 
-        /*
-         * The table itself is rendered dynamically.
-         * Row-level events are attached when rows are created.
-         */
+      state.page = 1;
 
-    }
+      applyFilters();
+    });
 
+    document
+      .getElementById("resetEndpointFilters")
+      .addEventListener("click", resetFilters);
 
-    // ============================================================
-    // REQUEST / RESPONSE WINDOWS
-    // ============================================================
+    document
+      .getElementById("clearEndpointSelection")
+      .addEventListener("click", () => {
+        state.selected.clear();
 
-    function wireWindows() {
+        render();
+      });
 
-        document
-            .querySelectorAll(
-                '[data-window-close]'
-            )
-            .forEach(
-                button => {
+    document
+      .getElementById("selectAllEndpoints")
+      .addEventListener("change", (event) => {
+        getPageItems().forEach((endpoint) => {
+          const id = getEndpointId(endpoint);
 
-                    button.addEventListener(
-                        'click',
-                        () => {
+          if (event.target.checked) {
+            state.selected.add(id);
+          } else {
+            state.selected.delete(id);
+          }
+        });
 
-                            const type =
-                                button.dataset
-                                    .windowClose;
+        render();
+      });
 
+    document.getElementById("prevPage").addEventListener("click", () => {
+      if (state.page > 1) {
+        state.page--;
 
-                            closeWindow(
-                                type ===
-                                    'request'
-                                    ? 'requestWindow'
-                                    : 'responseWindow'
-                            );
+        render();
+      }
+    });
 
-                        }
-                    );
+    document.getElementById("nextPage").addEventListener("click", () => {
+      if (state.page < getTotalPages()) {
+        state.page++;
 
-                }
-            );
+        render();
+      }
+    });
+  }
 
-    }
+  function resetFilters() {
+    state.search = "";
 
+    state.method = "all";
 
-    function openWindow(
-        id
-    ) {
+    state.tag = "";
 
-        document.getElementById(
-            id
-        )?.classList.remove(
-            'hidden'
-        );
+    state.page = 1;
 
-    }
+    document.getElementById("endpointSearch").value = "";
 
+    document.getElementById("methodFilter").value = "all";
 
-    function closeWindow(
-        id
-    ) {
+    document.getElementById("tagFilter").value = "";
 
-        document.getElementById(
-            id
-        )?.classList.add(
-            'hidden'
-        );
+    applyFilters();
+  }
 
-    }
+  // ============================================================
+  // TABLE
+  // ============================================================
 
+  function wireTable() {
+    /*
+     * The table itself is rendered dynamically.
+     * Row-level events are attached when rows are created.
+     */
+  }
 
-    // ============================================================
-    // NAVIGATION
-    // ============================================================
+  // ============================================================
+  // REQUEST / RESPONSE WINDOWS
+  // ============================================================
 
-    function wireNavigation() {
+  function wireWindows() {
+    document.querySelectorAll("[data-window-close]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const type = button.dataset.windowClose;
 
-        document.getElementById(
-            'backToCollections'
-        )?.addEventListener(
-            'click',
-            () => {
+        closeWindow(type === "request" ? "requestWindow" : "responseWindow");
+      });
+    });
+  }
 
-                window.location.href =
-                    './collection_view.html';
+  function openWindow(id) {
+    document.getElementById(id)?.classList.remove("hidden");
+  }
 
-            }
-        );
+  function closeWindow(id) {
+    document.getElementById(id)?.classList.add("hidden");
+  }
 
+  // ============================================================
+  // NAVIGATION
+  // ============================================================
 
-        document
-            .querySelectorAll(
-                '[data-target]'
-            )
-            .forEach(
-                button => {
+  function wireNavigation() {
+    document
+      .getElementById("backToCollections")
+      ?.addEventListener("click", () => {
+        window.location.href = "./collection_view.html";
+      });
 
-                    button.addEventListener(
-                        'click',
-                        () => {
+    document.querySelectorAll("[data-target]").forEach((button) => {
+      button.addEventListener("click", () => {
+        window.location.href = button.dataset.target;
+      });
+    });
+  }
 
-                            window.location.href =
-                                button.dataset.target;
+  // ============================================================
+  // ERROR
+  // ============================================================
 
-                        }
-                    );
+  function renderError(message) {
+    document.getElementById("collectionTitle").textContent =
+      "Collection Data View";
 
-                }
-            );
+    document.getElementById("collectionSubtitle").textContent = message;
 
-    }
-
-
-    // ============================================================
-    // ERROR
-    // ============================================================
-
-    function renderError(
-        message
-    ) {
-
-        document.getElementById(
-            'collectionTitle'
-        ).textContent =
-            'Collection Data View';
-
-
-        document.getElementById(
-            'collectionSubtitle'
-        ).textContent =
-            message;
-
-
-        document.getElementById(
-            'endpointTableBody'
-        ).innerHTML = `
+    document.getElementById("endpointTableBody").innerHTML = `
 
             <tr>
 
@@ -1761,9 +1022,7 @@
                         class="text-sm
                                text-rose-400"
                     >
-                        ${escapeHtml(
-                            message
-                        )}
+                        ${escapeHtml(message)}
                     </p>
 
                     <button
@@ -1787,117 +1046,54 @@
             </tr>
 
         `;
+  }
 
+  // ============================================================
+  // HELPERS
+  // ============================================================
+
+  function getEndpointId(endpoint) {
+    /*
+     * Prefer the endpoint's own ID.
+     * Fall back to the endpoint path so
+     * older prototype data still works.
+     */
+
+    return String(endpoint.endpoint_id ?? endpoint.id ?? endpoint.endpoint ?? Math.random());
+  }
+
+  function getQPCount(endpoint) {
+    if (Array.isArray(endpoint.queryParams)) {
+      return endpoint.queryParams.length;
     }
 
-
-    // ============================================================
-    // HELPERS
-    // ============================================================
-
-    function getEndpointId(
-        endpoint
-    ) {
-
-        /*
-         * Prefer the endpoint's own ID.
-         * Fall back to the endpoint path so
-         * older prototype data still works.
-         */
-
-        return String(
-            endpoint.id ??
-            endpoint.endpoint ??
-            Math.random()
-        );
-
+    if (Array.isArray(endpoint.qp)) {
+      return endpoint.qp.length;
     }
 
-
-    function getQPCount(
-        endpoint
-    ) {
-
-        if (
-            Array.isArray(
-                endpoint.queryParams
-            )
-        ) {
-
-            return endpoint.queryParams.length;
-
-        }
-
-
-        if (
-            Array.isArray(
-                endpoint.qp
-            )
-        ) {
-
-            return endpoint.qp.length;
-
-        }
-
-
-        if (
-            endpoint.queryParams &&
-            typeof endpoint.queryParams ===
-                'object'
-        ) {
-
-            return Object.keys(
-                endpoint.queryParams
-            ).length;
-
-        }
-
-
-        if (
-            endpoint.qp &&
-            typeof endpoint.qp ===
-                'object'
-        ) {
-
-            return Object.keys(
-                endpoint.qp
-            ).length;
-
-        }
-
-
-        return Number(
-            endpoint.qpCount ||
-            0
-        );
-
+    if (endpoint.queryParams && typeof endpoint.queryParams === "object") {
+      return Object.keys(endpoint.queryParams).length;
     }
 
+    if (endpoint.qp && typeof endpoint.qp === "object") {
+      return Object.keys(endpoint.qp).length;
+    }
 
-    function renderEndpointPath(
-        path
-    ) {
+    return Number(endpoint.qpCount || 0);
+  }
 
-        const segments =
-            String(
-                path || ''
-            )
-                .split('/')
-                .filter(Boolean);
+  function renderEndpointPath(path) {
+    const segments = String(path || "")
+      .split("/")
+      .filter(Boolean);
 
+    if (!segments.length) {
+      return "—";
+    }
 
-        if (!segments.length) {
-
-            return '—';
-
-        }
-
-
-        return segments
-            .map(
-                (segment, index) => {
-
-                    return `
+    return segments
+      .map((segment, index) => {
+        return `
 
                         <span
                             class="endpoint-segment
@@ -1905,144 +1101,345 @@
                                    transition
                                    hover:bg-cyan-500/10
                                    hover:text-cyan-300"
-                            data-segment="${escapeAttr(
-                                segment
-                            )}"
+                            data-segment="${escapeAttr(segment)}"
                         >
                             ${
-                                index === 0
-                                    ? '/' +
-                                      escapeHtml(
-                                          segment
-                                      )
-                                    : '/' +
-                                      escapeHtml(
-                                          segment
-                                      )
+                              index === 0
+                                ? "/" + escapeHtml(segment)
+                                : "/" + escapeHtml(segment)
                             }
                         </span>
 
                     `;
+      })
+      .join("");
+  }
 
+  function methodClass(method) {
+    return (
+      {
+        GET: "text-emerald-400",
+
+        POST: "text-sky-400",
+
+        PUT: "text-amber-400",
+
+        PATCH: "text-violet-400",
+
+        DELETE: "text-rose-400",
+      }[method] || "text-slate-300"
+    );
+  }
+
+  function capitalize(value) {
+    const text = String(value || "");
+
+    return text ? text.charAt(0).toUpperCase() + text.slice(1) : "";
+  }
+
+  function formatData(value) {
+    if (typeof value === "string") {
+      return value;
+    }
+
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return String(value);
+    }
+  }
+
+  // ============================================================
+  // CONTEXT MENU
+  // ============================================================
+
+  function openEndpointContextMenu(event, endpoint) {
+    if (!contextMenu) return;
+
+        const count = state.selected.size;
+
+        let menuHtml = `
+            <div class="px-3 py-2 text-[10px] font-semibold tracking-wide text-slate-500 uppercase border-b border-slate-800">
+                ${count > 1 ? `${count} Endpoints Selected` : "Endpoint Options"}
+            </div>
+            
+            <div class="p-1">
+        `;
+
+        if (count === 1) {
+          menuHtml += `
+                <button type="button" id="ctxEditTags" class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800">
+                    <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M20.5 13.5 13.5 20.5 a2 2 0 0 1-2.8 0L4 13.8V4h9.8l6.7 6.7 a2 2 0 0 1 0 2.8Z" />
+                        <circle cx="8.5" cy="8.5" r="1" />
+                    </svg>
+                    Edit Tags
+                </button>
+            `;
+        }
+
+        menuHtml += `
+                <button type="button" id="ctxManageTags" class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-300 hover:bg-slate-800">
+                    <svg class="h-3.5 w-3.5 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M20.5 13.5 13.5 20.5 a2 2 0 0 1-2.8 0L4 13.8V4h9.8l6.7 6.7 a2 2 0 0 1 0 2.8Z" />
+                        <circle cx="8.5" cy="8.5" r="1" />
+                    </svg>
+                    Manage Tags (Bulk)
+                </button>
+            </div>
+            
+            <div class="border-t border-slate-800 p-1">
+                <button type="button" id="ctxRemoveEndpoint" class="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-rose-400 hover:bg-rose-500/10 hover:text-rose-300">
+                    <svg class="h-3.5 w-3.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <path d="M4 7h16" />
+                        <path d="M10 11v6M14 11v6" />
+                        <path d="M6 7l1 13h10l1-13" />
+                        <path d="M9 7V4h6v3" />
+                    </svg>
+                    Remove from Collection
+                </button>
+            </div>
+        `;
+
+        contextMenu.innerHTML = menuHtml;
+        contextMenu.classList.remove("hidden");
+
+        // Position menu
+        const rect = contextMenu.getBoundingClientRect();
+        let x = event.clientX;
+        let y = event.clientY;
+
+        if (x + rect.width > window.innerWidth)
+          x = window.innerWidth - rect.width - 5;
+        if (y + rect.height > window.innerHeight)
+          y = window.innerHeight - rect.height - 5;
+
+        contextMenu.style.left = `${x}px`;
+        contextMenu.style.top = `${y}px`;
+
+        // Bind events
+        if (count === 1) {
+          document
+            .getElementById("ctxEditTags")
+            ?.addEventListener("click", () => {
+              closeContextMenu();
+              openTagEditor(endpoint);
+            });
+        }
+
+        document
+          .getElementById("ctxManageTags")
+          .addEventListener("click", () => {
+            closeContextMenu();
+            const btn = document.getElementById("tagsManager");
+            if (btn) btn.click();
+          });
+
+        document
+          .getElementById("ctxRemoveEndpoint")
+          .addEventListener("click", () => {
+            closeContextMenu();
+            const btn = document.getElementById("deleteSelected");
+            if (btn) btn.click();
+          });
+      }
+
+      function openTagEditor(endpoint) {
+        const currentTags = Array.isArray(endpoint.tags)
+          ? endpoint.tags.join(", ")
+          : "";
+
+        openModal(
+          `Edit Tags — ${getEndpointId(endpoint)}`,
+          `
+                <div class="space-y-4">
+                    <div>
+                        <label class="mb-1 block text-xs text-slate-500">Tags</label>
+                        <input id="tagEditorInput" value="${escapeAttr(currentTags)}" class="h-9 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-xs outline-none focus:border-cyan-500">
+                        <p class="mt-1 text-[10px] text-slate-600">Separate tags with commas.</p>
+                    </div>
+                    <div class="flex justify-end gap-2">
+                        <button type="button" data-modal-close class="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800">Cancel</button>
+                        <button id="saveTagsBtn" type="button" class="rounded-md bg-cyan-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-cyan-500">Save</button>
+                    </div>
+                </div>
+            `,
+        );
+
+        document
+          .getElementById("saveTagsBtn")
+          ?.addEventListener("click", async () => {
+            const btn = document.getElementById("saveTagsBtn");
+            const input = document.getElementById("tagEditorInput");
+
+            btn.disabled = true;
+            btn.textContent = "Saving...";
+
+            const newTags = input.value
+              .split(",")
+              .map((tag) => tag.trim())
+              .filter(Boolean);
+            const oldTags = Array.isArray(endpoint.tags)
+              ? [...endpoint.tags]
+              : [];
+            const oldTagSet = new Set(oldTags);
+            const newTagSet = new Set(newTags);
+
+            const tagsToAdd = newTags.filter((tag) => !oldTagSet.has(tag));
+            const tagsToRemove = oldTags.filter((tag) => !newTagSet.has(tag));
+
+            const api = window.EdmsAPI;
+            if (!api || typeof api.addEndpointTag !== "function") {
+              console.error("API unavailable");
+              return;
+            }
+
+            try {
+              for (const tag of tagsToRemove) {
+                await api.removeEndpointTag(getEndpointId(endpoint), tag);
+              }
+              for (const tag of tagsToAdd) {
+                await api.addEndpointTag(getEndpointId(endpoint), tag);
+              }
+
+              // Instead of completely reloading, update local state
+              endpoint.tags = newTags;
+              renderTable();
+              closeModal();
+            } catch (err) {
+              console.error(err);
+              btn.disabled = false;
+              btn.textContent = "Error";
+            }
+          });
+      }
+
+      function wireRemoveAction() {
+        const delBtn = document.getElementById("deleteSelected");
+        if (delBtn) {
+          delBtn.addEventListener("click", () => {
+            if (state.selected.size === 0) return;
+
+            openModal(
+              "Remove Endpoints",
+              `
+                    <div class="space-y-4">
+                        <p class="text-xs text-slate-300">
+                            Are you sure you want to remove ${state.selected.size} endpoint${state.selected.size === 1 ? "" : "s"} from this collection?
+                        </p>
+                        <p class="text-[10px] text-slate-500">
+                            This will not delete the endpoints from the system, only from this collection.
+                        </p>
+                        <div class="flex justify-end gap-2 pt-2">
+                            <button type="button" class="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800" data-modal-close>Cancel</button>
+                            <button id="confirmRemove" type="button" class="rounded-md bg-rose-600/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-rose-500">Remove</button>
+                        </div>
+                    </div>
+                `,
+            );
+
+            const confirmBtn = document.getElementById("confirmRemove");
+            if (confirmBtn) {
+              confirmBtn.addEventListener("click", async () => {
+                confirmBtn.disabled = true;
+                confirmBtn.textContent = "Removing...";
+
+                const api = window.EdmsAPI;
+                if (!api) return closeModal();
+
+                const folderId = new URLSearchParams(
+                  window.location.search,
+                ).get("folder");
+
+                try {
+                  const ids = Array.from(state.selected);
+                  for (const eid of ids) {
+                    await api.removeCollectionEndpoint(folderId, eid);
+                  }
+
+                  // Re-fetch everything
+                  await loadCollection();
+                  state.selected.clear();
+                  updateSelectionUI();
+                  closeModal();
+                } catch (e) {
+                  console.error("Failed to remove endpoints:", e);
+                  confirmBtn.disabled = false;
+                  confirmBtn.textContent = "Error";
                 }
-            )
-            .join('');
-
-    }
-
-
-    function methodClass(
-        method
-    ) {
-
-        return {
-
-            GET:
-                'text-emerald-400',
-
-            POST:
-                'text-sky-400',
-
-            PUT:
-                'text-amber-400',
-
-            PATCH:
-                'text-violet-400',
-
-            DELETE:
-                'text-rose-400'
-
-        }[
-            method
-        ] || 'text-slate-300';
-
-    }
-
-
-    function capitalize(
-        value
-    ) {
-
-        const text =
-            String(
-                value || ''
-            );
-
-
-        return text
-            ? text.charAt(0).toUpperCase() +
-              text.slice(1)
-            : '';
-
-    }
-
-
-    function formatData(
-        value
-    ) {
-
-        if (
-            typeof value ===
-            'string'
-        ) {
-
-            return value;
-
+              });
+            }
+          });
         }
+      }
 
+      // Call wireRemoveAction during init
+      document.addEventListener("DOMContentLoaded", () => {
+        // Will wait for init to finish before wiring to ensure DOM is ready
+        setTimeout(wireRemoveAction, 100);
+      });
 
-        try {
+  function escapeHtml(value) {
+    const div = document.createElement("div");
 
-            return JSON.stringify(
-                value,
-                null,
-                2
-            );
+    div.textContent = String(value ?? "");
 
-        } catch {
+    return div.innerHTML;
+  }
 
-            return String(
-                value
-            );
+  function escapeAttr(value) {
+    return escapeHtml(value).replace(/"/g, "&quot;");
+  }
 
-        }
+  // ============================================================
+  // MODAL AND CONTEXT MENU HELPERS
+  // ============================================================
 
+  const modalOverlay = document.getElementById("modalOverlay");
+  const modalPanel = document.getElementById("modalPanel");
+  const modalTitle = document.getElementById("modalTitle");
+  const modalContent = document.getElementById("modalContent");
+  const modalClose = document.getElementById("modalClose");
+  const contextMenu = document.getElementById("contextMenu");
+
+  if (modalClose) {
+    modalClose.addEventListener("click", closeModal);
+  }
+  if (modalOverlay) {
+    modalOverlay.addEventListener("click", (e) => {
+      if (e.target === modalOverlay) closeModal();
+    });
+  }
+  document.addEventListener("click", (e) => {
+    if (contextMenu && !contextMenu.contains(e.target)) {
+      closeContextMenu();
     }
-
-
-    function escapeHtml(
-        value
-    ) {
-
-        const div =
-            document.createElement(
-                'div'
-            );
-
-
-        div.textContent =
-            String(
-                value ?? ''
-            );
-
-
-        return div.innerHTML;
-
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeModal();
+      closeContextMenu();
     }
+  });
 
+  function openModal(title, content) {
+    if (!modalOverlay) return;
+    modalTitle.textContent = title;
+    modalContent.innerHTML = content;
+    modalOverlay.classList.remove("hidden");
+    modalOverlay.classList.add("flex");
+  }
 
-    function escapeAttr(
-        value
-    ) {
+  function closeModal() {
+    modalOverlay?.classList.add("hidden");
+    modalOverlay?.classList.remove("flex");
+  }
 
-        return escapeHtml(
-            value
-        )
-            .replace(
-                /"/g,
-                '&quot;'
-            );
+  function closeContextMenu() {
+    contextMenu?.classList.add("hidden");
+  }
 
-    }
-
+  window.openModal = openModal;
+  window.closeModal = closeModal;
+  window.closeContextMenu = closeContextMenu;
 })();

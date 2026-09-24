@@ -244,6 +244,21 @@ function init() {
             }
 
 
+            <!-- ============================================ -->
+            <!-- EDIT TAGS -->
+            <!-- ============================================ -->
+
+            ${
+                isSingle
+                    ? menuItem(
+                        'edittags',
+                        iconTag(),
+                        'Edit Tags'
+                    )
+                    : ''
+            }
+
+
             ${
                 isSingle
                     ? '<div class="my-1 border-t border-slate-800"></div>'
@@ -465,6 +480,26 @@ function init() {
 
                         window.CollectionView
                             .openRenameModal(
+                                targetIds[0]
+                            );
+
+                    }
+
+                    break;
+
+
+                // --------------------------------------------
+                // EDIT TAGS
+                // --------------------------------------------
+
+                case 'edittags':
+
+                    if (
+                        targetIds.length === 1
+                    ) {
+
+                        window.CollectionView
+                            .openTagEditor(
                                 targetIds[0]
                             );
 
@@ -963,6 +998,14 @@ function init() {
 
         `);
 
+    }
+
+
+    function iconTag() {
+        return iconBase(`
+            <path d="M20.5 13.5 13.5 20.5a2 2 0 0 1-2.8 0L4 13.8V4h9.8l6.7 6.7a2 2 0 0 1 0 2.8Z" />
+            <circle cx="8.5" cy="8.5" r="1" />
+        `);
     }
 
 }
