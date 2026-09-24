@@ -97,91 +97,107 @@
 
 
         try {
-
-            const response =
-                await fetch(
-                    DATA_URL
-                );
-
-
-            if (!response.ok) {
-
-                throw new Error(
-                    `HTTP ${response.status}`
-                );
-
+            const api = window.EdmsAPI;
+            if (!api) {
+                throw new Error("API not loaded");
             }
 
-
-            const data =
-                await response.json();
-
-
-            const folders =
-                Array.isArray(
-                    data.folders
-                )
-                    ? data.folders
-                    : [];
-
-
-            state.collection =
-                folders.find(
-                    folder =>
-                        Number(folder.id) ===
-                        Number(folderId)
-                );
-
-
-            if (
-                !state.collection
-            ) {
-
-                renderError(
-                    'The requested collection could not be found.'
-                );
-
+            const collectionResponse = await api.getCollection(folderId);
+            if (!collectionResponse || collectionResponse.ok === false) {
+                renderError('The requested collection could not be found.');
                 return;
-
             }
+            const colData = collectionResponse.data ?? collectionResponse;
+            state.collection = colData.collection ?? colData;
 
+            const endpointsResponse = await api.listCollectionEndpoints(folderId);
+            let endpointsList = [];
+            if (endpointsResponse && endpointsResponse.ok !== false) {
+                const epData = endpointsResponse.data ?? endpointsResponse;
+                endpointsList = Array.isArray(epData) 
+                    ? epData 
+                    : (Array.isArray(epData?.endpoints) 
+                        ? epData.endpoints 
+                        : (Array.isArray(epData?.items) ? epData.items : []));
+            }
+            state.collection.endpoints = endpointsList;
 
-            state.endpoints =
-                Array.isArray(
-                    state.collection.endpoints
-                )
-                    ? state.collection.endpoints
-                    : [];
+            const metadataMap = new Map();
+            await new Promise((resolve) => {
+                let socket;
+                let resolved = false;
+                const finish = () => {
+                    if (resolved) return;
+                    resolved = true;
+                    if (socket) socket.close();
+                    resolve();
+                };
+                const timeout = setTimeout(finish, 5000);
+                try {
+                    socket = api.connectEndpointLoader();
+                    if (!socket) {
+                        clearTimeout(timeout);
+                        return finish();
+                    }
+                    socket.onmessage = (event) => {
+                        try {
+                            const message = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+                            function collect(val) {
+                                if (!val) return;
+                                if (Array.isArray(val)) { val.forEach(collect); return; }
+                                if (typeof val !== 'object') return;
+                                const eid = val.endpoint_id ?? val.id;
+                                if (eid) {
+                                    metadataMap.set(String(eid), val);
+                                }
+                                Object.values(val).forEach(collect);
+                            }
+                            collect(message);
+                            if (metadataMap.size > 0) {
+                                clearTimeout(timeout);
+                                finish();
+                            }
+                        } catch (e) {
+                            console.error("Error parsing websocket message", e);
+                        }
+                    };
+                    socket.onerror = () => {
+                        clearTimeout(timeout);
+                        finish();
+                    };
+                    socket.onclose = () => {
+                        clearTimeout(timeout);
+                        finish();
+                    };
+                } catch (e) {
+                    clearTimeout(timeout);
+                    finish();
+                }
+            });
 
+            state.endpoints = state.collection.endpoints.map(endpoint => {
+                const eid = String(endpoint.endpoint_id ?? endpoint.id ?? '');
+                const info = metadataMap.get(eid) || {};
+                return {
+                    ...endpoint,
+                    endpoint: info.endpoint_str ?? endpoint.endpoint ?? '',
+                    endpoint_str: info.endpoint_str ?? endpoint.endpoint_str ?? '',
+                    annotation: info.annotation ?? endpoint.annotation,
+                    method: info.method ?? endpoint.method ?? '',
+                    tags: Array.isArray(info.tags) ? info.tags : []
+                };
+            });
 
-            state.filtered =
-                [
-                    ...state.endpoints
-                ];
-
+            state.filtered = [...state.endpoints];
 
             renderCollectionInfo();
-
             renderTagFilter();
-
             renderStats();
-
             render();
-
         } catch (error) {
-
-            console.error(
-                'Failed to load collection:',
-                error
-            );
-
-
-            renderError(
-                'Unable to load collection data.'
-            );
-
+            console.error('Failed to load collection:', error);
+            renderError('Unable to load collection data.');
         }
-
     }
 
 
