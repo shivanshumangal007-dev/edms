@@ -1173,7 +1173,7 @@
                         <path d="M20.5 13.5 13.5 20.5 a2 2 0 0 1-2.8 0L4 13.8V4h9.8l6.7 6.7 a2 2 0 0 1 0 2.8Z" />
                         <circle cx="8.5" cy="8.5" r="1" />
                     </svg>
-                    Edit Tags
+                    Modify
                 </button>
             `;
         }
@@ -1250,8 +1250,11 @@
           : "";
         const currentAnnotation = endpoint.annotation || "";
 
+        const endpointId = getEndpointId(endpoint);
+        const pathText = endpoint.endpoint ? ` — ${escapeHtml(endpoint.endpoint)}` : "";
+
         openModal(
-          `Edit Tags & Annotation — ${getEndpointId(endpoint)}`,
+          `Endpoint — ${escapeHtml(endpointId)}${pathText}`,
           `
                 <div class="space-y-4">
                     <div>

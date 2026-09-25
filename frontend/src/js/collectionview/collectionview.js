@@ -203,13 +203,13 @@
             /*
              * These fields are deliberately not
              * populated because the backend collection
-             * API does not provide them.
+             * API does not provide them (except annotation).
              */
             purpose: undefined,
 
             datatype: undefined,
 
-            annotation: undefined,
+            annotation: item.annotation ?? undefined,
 
             source: undefined,
 
@@ -2373,7 +2373,7 @@
             class="mb-4 text-sm font-semibold
                    text-white"
         >
-            Edit Tags & Annotation
+            Collection — ${escapeHtml(folder.name)}
         </h2>
 
 

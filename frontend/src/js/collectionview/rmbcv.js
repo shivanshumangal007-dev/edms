@@ -245,7 +245,7 @@ function init() {
 
 
             <!-- ============================================ -->
-            <!-- EDIT TAGS -->
+            <!-- MODIFY (TAGS & ANNOTATION) -->
             <!-- ============================================ -->
 
             ${
@@ -253,7 +253,7 @@ function init() {
                     ? menuItem(
                         'edittags',
                         iconTag(),
-                        'Edit Tags'
+                        'Modify'
                     )
                     : ''
             }

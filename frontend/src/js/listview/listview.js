@@ -3700,7 +3700,7 @@ function openEndpointContextMenu(
 
         ${contextMenuItem(
             "tags",
-            "Edit Tags",
+            "Modify",
             iconTag()
         )}
 
@@ -4378,8 +4378,9 @@ function openTagEditor(
             : "";
     const currentAnnotation = endpoint.annotation || "";
 
+    const pathText = endpoint.endpoint ? ` — ${escapeHTML(endpoint.endpoint)}` : "";
     openModal(
-        `Edit Tags & Annotation — ${endpoint.id}`,
+        `Endpoint — ${escapeHTML(endpoint.id)}${pathText}`,
         `
 
             <div class="space-y-4">
