@@ -1633,6 +1633,12 @@
       if (e.target === modalOverlay) closeModal();
     });
   }
+  // Wire any [data-modal-close] buttons injected dynamically into the modal
+  if (modalPanel) {
+    modalPanel.addEventListener("click", (e) => {
+      if (e.target.closest("[data-modal-close]")) closeModal();
+    });
+  }
   document.addEventListener("click", (e) => {
     if (contextMenu && !contextMenu.contains(e.target)) {
       closeContextMenu();
