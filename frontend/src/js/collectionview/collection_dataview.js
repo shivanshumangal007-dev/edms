@@ -1248,15 +1248,20 @@
         const currentTags = Array.isArray(endpoint.tags)
           ? endpoint.tags.join(", ")
           : "";
+        const currentAnnotation = endpoint.annotation || "";
 
         openModal(
-          `Edit Tags — ${getEndpointId(endpoint)}`,
+          `Edit Tags & Annotation — ${getEndpointId(endpoint)}`,
           `
                 <div class="space-y-4">
                     <div>
                         <label class="mb-1 block text-xs text-slate-500">Tags</label>
                         <input id="tagEditorInput" value="${escapeAttr(currentTags)}" class="h-9 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-xs outline-none focus:border-cyan-500">
                         <p class="mt-1 text-[10px] text-slate-600">Separate tags with commas.</p>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-xs text-slate-500">Annotation</label>
+                        <textarea id="annotationEditorInput" class="h-20 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-xs outline-none focus:border-cyan-500" placeholder="Optional notes...">${escapeHtml(currentAnnotation)}</textarea>
                     </div>
                     <div class="flex justify-end gap-2">
                         <button type="button" data-modal-close class="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800">Cancel</button>
@@ -1271,6 +1276,7 @@
           ?.addEventListener("click", async () => {
             const btn = document.getElementById("saveTagsBtn");
             const input = document.getElementById("tagEditorInput");
+            const annotationInput = document.getElementById("annotationEditorInput");
 
             btn.disabled = true;
             btn.textContent = "Saving...";
@@ -1288,6 +1294,9 @@
             const tagsToAdd = newTags.filter((tag) => !oldTagSet.has(tag));
             const tagsToRemove = oldTags.filter((tag) => !newTagSet.has(tag));
 
+            const newAnnotation = annotationInput.value;
+            const isAnnotationChanged = newAnnotation !== currentAnnotation;
+
             const api = window.EdmsAPI;
             if (!api || typeof api.addEndpointTag !== "function") {
               console.error("API unavailable");
@@ -1300,6 +1309,11 @@
               }
               for (const tag of tagsToAdd) {
                 await api.addEndpointTag(getEndpointId(endpoint), tag);
+              }
+
+              if (isAnnotationChanged && typeof api.setEndpointAnnotation === "function") {
+                await api.setEndpointAnnotation(getEndpointId(endpoint), newAnnotation);
+                endpoint.annotation = newAnnotation;
               }
 
               // Instead of completely reloading, update local state

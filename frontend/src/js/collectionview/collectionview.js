@@ -2365,6 +2365,7 @@
     const currentTags = Array.isArray(folder.tags)
       ? folder.tags.join(", ")
       : "";
+    const currentAnnotation = folder.annotation || "";
 
     openModal(`
 
@@ -2372,28 +2373,40 @@
             class="mb-4 text-sm font-semibold
                    text-white"
         >
-            Edit Tags
+            Edit Tags & Annotation
         </h2>
 
 
-        <input
-            id="collectionTagInput"
-            value="${escapeAttr(currentTags)}"
-            class="h-9 w-full
-                   rounded-md
-                   border border-slate-700
-                   bg-slate-950 px-3
-                   text-xs outline-none
-                   focus:border-cyan-500"
-        >
+        <div class="space-y-4">
+            <div>
+                <label class="mb-1 block text-xs text-slate-500">Tags</label>
+                <input
+                    id="collectionTagInput"
+                    value="${escapeAttr(currentTags)}"
+                    class="h-9 w-full
+                           rounded-md
+                           border border-slate-700
+                           bg-slate-950 px-3
+                           text-xs outline-none
+                           focus:border-cyan-500"
+                >
+                <p
+                    class="mt-1 text-[10px]
+                           text-slate-600"
+                >
+                    Separate tags with commas.
+                </p>
+            </div>
 
-
-        <p
-            class="mt-1 text-[10px]
-                   text-slate-600"
-        >
-            Separate tags with commas.
-        </p>
+            <div>
+                <label class="mb-1 block text-xs text-slate-500">Annotation</label>
+                <textarea
+                    id="collectionAnnotationInput"
+                    class="h-20 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-xs outline-none focus:border-cyan-500"
+                    placeholder="Optional notes..."
+                >${escapeHtml(currentAnnotation)}</textarea>
+            </div>
+        </div>
 
 
         <div
@@ -2447,6 +2460,7 @@
         }
 
         const input = document.getElementById("collectionTagInput").value;
+        const annotationInput = document.getElementById("collectionAnnotationInput").value;
 
         const newTags = [
           ...new Set(
@@ -2472,6 +2486,14 @@
             await api.addMembershipTag(folder.name, tag);
           }
 
+          if (annotationInput !== currentAnnotation && typeof api.setCollectionAnnotation === "function") {
+            await api.setCollectionAnnotation(folder.name, annotationInput);
+            folder.annotation = annotationInput;
+          } else if (annotationInput !== currentAnnotation) {
+            // Fallback for UI if API is missing (matches previous logic)
+            folder.annotation = annotationInput;
+          }
+
           closeModal();
 
           await loadFolders();
@@ -2480,9 +2502,9 @@
 
           applyFilters();
         } catch (error) {
-          console.error("Failed to update collection tags:", error);
+          console.error("Failed to update collection:", error);
 
-          showAlert(`Failed to update tags: ${error.message}`);
+          showAlert(`Failed to update collection: ${error.message}`);
         }
       });
   }

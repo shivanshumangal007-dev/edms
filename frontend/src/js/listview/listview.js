@@ -4376,9 +4376,10 @@ function openTagEditor(
         )
             ? endpoint.tags.join(", ")
             : "";
+    const currentAnnotation = endpoint.annotation || "";
 
     openModal(
-        `Edit Tags — ${endpoint.id}`,
+        `Edit Tags & Annotation — ${endpoint.id}`,
         `
 
             <div class="space-y-4">
@@ -4411,6 +4412,15 @@ function openTagEditor(
                         Separate tags with commas.
                     </p>
 
+                </div>
+
+                <div>
+                    <label class="mb-1 block text-xs text-slate-500">Annotation</label>
+                    <textarea
+                        id="annotationEditorInput"
+                        class="h-20 w-full rounded-md border border-slate-700 bg-slate-950 p-2 text-xs outline-none focus:border-cyan-500"
+                        placeholder="Optional notes..."
+                    >${escapeHTML(currentAnnotation)}</textarea>
                 </div>
 
                 <div class="flex justify-end gap-2">
@@ -4456,6 +4466,11 @@ function openTagEditor(
                 const input =
                     document.getElementById(
                         "tagEditorInput"
+                    );
+
+                const annotationInput =
+                    document.getElementById(
+                        "annotationEditorInput"
                     );
 
                 const button =
@@ -4545,6 +4560,14 @@ function openTagEditor(
                                 tag
                             );
 
+                    }
+
+                    const newAnnotation = annotationInput.value;
+                    if (newAnnotation !== currentAnnotation && typeof window.EdmsAPI.setEndpointAnnotation === "function") {
+                        await window.EdmsAPI.setEndpointAnnotation(getBookmarkEndpointId(endpoint), newAnnotation);
+                        endpoint.annotation = newAnnotation;
+                    } else if (newAnnotation !== currentAnnotation) {
+                        endpoint.annotation = newAnnotation;
                     }
 
                     endpoint.tags =

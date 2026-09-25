@@ -223,6 +223,26 @@
 
 
     // ============================================================
+    // UPDATE ENDPOINT ANNOTATION
+    // ============================================================
+
+    async function setEndpointAnnotation(
+        endpointId,
+        annotation
+    ) {
+
+        return http(
+            'POST',
+            `/endpoints/${encodeURIComponent(endpointId)}/annotation`,
+            {
+                annotation
+            }
+        );
+
+    }
+
+
+    // ============================================================
     // STATIC VIEW METADATA
     // ============================================================
 
@@ -1024,6 +1044,21 @@
         return http(
             'POST',
             `/collections/${encodeURIComponent(name)}/delete`
+        );
+
+    }
+
+    async function setCollectionAnnotation(
+        name,
+        annotation
+    ) {
+
+        return http(
+            'POST',
+            `/collections/${encodeURIComponent(name)}/annotation`,
+            {
+                annotation
+            }
         );
 
     }
@@ -1957,6 +1992,7 @@
         registerEndpoint,
         registerAllEndpoints,
         deleteEndpoint,
+        setEndpointAnnotation,
 
 
         // ----------------------------------------
@@ -2007,6 +2043,7 @@
         createCollection,
         renameCollection,
         deleteCollection,
+        setCollectionAnnotation,
 
         listCollectionEndpoints,
         removeEndpointFromCollection,
