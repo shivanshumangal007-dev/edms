@@ -890,12 +890,19 @@ function normalizeBackendEndpoint(endpoint) {
 
 function loadBookmarksFromBackend() {
 
+    // If there's no collection context, don't try to load bookmarks.
+    if (!activeCollectionFilter) {
+        return Promise.resolve();
+    }
+
+    const collectionForThisLoad = activeCollectionFilter;
+
     return new Promise(
         (resolve, reject) => {
 
             const ws =
                 window.EdmsAPI
-                    .connectBookmarkLoader();
+                    .connectBookmarkLoader(collectionForThisLoad);
 
             bookmarkWS = ws;
 
@@ -943,7 +950,7 @@ function loadBookmarksFromBackend() {
                             finished = true;
 
                             console.log(
-                                `Loaded ${bookmarks.length} active bookmarks from backend.`
+                                `Loaded ${bookmarks.length} bookmarks for collection '${collectionForThisLoad}' from backend.`
                             );
 
                             if (!wasFinished) {
@@ -954,11 +961,20 @@ function loadBookmarksFromBackend() {
 
                         } else if (message.type === "event" && message.event) {
                             const evtType = message.event.type;
+                            const evtCollection = message.event.collection;
+
+                            if (evtType === "ViewRefresh") {
+                                // Always reload on a view refresh.
+                                try { ws.close(); } catch {}
+                                setTimeout(() => loadBookmarksFromBackend().then(() => applyTestFilters()), 0);
+                                return;
+                            }
+
                             if (
-                                evtType === "BookmarksUpdated" ||
-                                evtType === "CollectionLoaded" ||
-                                evtType === "ViewRefresh"
+                                evtType === "BookmarksUpdated" &&
+                                evtCollection === collectionForThisLoad
                             ) {
+                                // Only reload if the update is for *our* collection.
                                 try { ws.close(); } catch {}
                                 setTimeout(() => loadBookmarksFromBackend().then(() => applyTestFilters()), 0);
                                 return;
@@ -2028,11 +2044,13 @@ async function saveEndpointToActiveCollection(
     try {
 
         await window.EdmsAPI.addActiveBookmark(
+            activeCollectionFilter,
             endpointId
         );
 
         const result =
             await window.EdmsAPI.saveActiveBookmark(
+                activeCollectionFilter,
                 endpointId
             );
 
