@@ -6083,7 +6083,7 @@ function updateSidebarTabUnderline() {
 
                 }
 
-
+                return (
                     activeSidebarTab ===
                     "endpoints"
                 );
