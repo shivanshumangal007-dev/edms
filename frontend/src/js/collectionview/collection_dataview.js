@@ -26,7 +26,9 @@
 
     method: "all",
 
-    tag: "",
+    tags: new Set(),
+
+    segments: new Set(),
 
     selected: new Set(),
 
@@ -47,6 +49,8 @@
     wireTable();
 
     wireWindows();
+
+    wireSidebar();
 
     await loadCollection();
 
@@ -228,7 +232,9 @@
       state.filtered = [...state.endpoints];
 
       renderCollectionInfo();
-      renderTagFilter();
+      updateSidebarStats();
+      renderTags();
+      renderSegments();
       renderStats();
       render();
     } catch (error) {
@@ -262,9 +268,13 @@
 
       const matchesMethod = state.method === "all" || method === state.method;
 
-      const matchesTag = !state.tag || tags.includes(state.tag);
+      const matchesTags = state.tags.size === 0 || [...state.tags].every((tag) => tags.includes(tag));
 
-      return matchesSearch && matchesMethod && matchesTag;
+      const endpointSegments = getEndpointSegments(path);
+
+      const matchesSegments = state.segments.size === 0 || [...state.segments].every((segment) => endpointSegments.includes(segment));
+
+      return matchesSearch && matchesMethod && matchesTags && matchesSegments;
     });
 
     state.page = Math.min(state.page, getTotalPages());
@@ -534,13 +544,14 @@
       button.addEventListener("click", (event) => {
         event.stopPropagation();
 
-        state.tag = button.dataset.tag;
-
-        const select = document.getElementById("tagFilter");
-
-        select.value = state.tag;
+        const tag = button.dataset.tag;
+        state.tags.clear();
+        state.tags.add(tag);
 
         state.page = 1;
+
+        // Re-render sidebar to sync checkboxes
+        renderTags();
 
         applyFilters();
       });
@@ -560,16 +571,6 @@
 
     row.addEventListener("contextmenu", (event) => {
       event.preventDefault();
-      const id = getEndpointId(endpoint);
-      if (!state.selected.has(id)) {
-        state.selected.clear();
-        state.selected.add(id);
-        updateSelectionUI();
-
-        document.querySelectorAll(".endpoint-checkbox").forEach((cb) => {
-          cb.checked = state.selected.has(cb.dataset.id);
-        });
-      }
       openEndpointContextMenu(event, endpoint);
     });
 
@@ -678,28 +679,168 @@
   // TAG FILTER
   // ============================================================
 
-  function renderTagFilter() {
-    const select = document.getElementById("tagFilter");
+  function getEndpointSegments(endpointPath) {
+    return String(endpointPath || "").split("/").filter(Boolean);
+  }
+
+  function wireSidebar() {
+    const btn = document.getElementById("sidebarToggle");
+    const sidebar = document.getElementById("filterSidebar");
+    const content = document.getElementById("sidebarContent");
+    const title = document.getElementById("sidebarTitle");
+    const icon = document.getElementById("sidebarToggleIcon");
+
+    if (!btn || !sidebar) return;
+
+    let sidebarCollapsed = false;
+
+    btn.addEventListener("click", () => {
+      sidebarCollapsed = !sidebarCollapsed;
+
+      if (sidebarCollapsed) {
+        sidebar.classList.remove("w-48");
+        sidebar.classList.add("w-10");
+        content?.classList.add("hidden");
+        title?.classList.add("hidden");
+        if (icon) {
+          icon.innerHTML = '<path d="m9 18 6-6-6-6" />';
+        }
+      } else {
+        sidebar.classList.remove("w-10");
+        sidebar.classList.add("w-48");
+        content?.classList.remove("hidden");
+        title?.classList.remove("hidden");
+        if (icon) {
+          icon.innerHTML = '<path d="m15 18-6-6 6-6" />';
+        }
+      }
+    });
+  }
+
+  function updateSidebarStats() {
+    const elEndpoints = document.getElementById("endpointStat");
+    const elTags = document.getElementById("tagStat");
+    const elSegments = document.getElementById("segmentStat");
+
+    if (elEndpoints) elEndpoints.textContent = state.endpoints.length;
 
     const tags = new Set();
-
-    state.endpoints.forEach((endpoint) => {
-      const endpointTags = Array.isArray(endpoint.tags) ? endpoint.tags : [];
-
-      endpointTags.forEach((tag) => tags.add(tag));
+    const segments = new Set();
+    state.endpoints.forEach((ep) => {
+      (Array.isArray(ep.tags) ? ep.tags : []).forEach((t) => tags.add(t));
+      getEndpointSegments(ep.endpoint).forEach((s) => segments.add(s));
     });
 
-    select.innerHTML = '<option value="">Tags</option>';
+    if (elTags) elTags.textContent = tags.size;
+    if (elSegments) elSegments.textContent = segments.size;
+  }
 
-    [...tags].sort().forEach((tag) => {
-      const option = document.createElement("option");
+  function renderTags() {
+    const container = document.getElementById("tagsContainer");
+    if (!container) return;
 
-      option.value = tag;
-
-      option.textContent = tag;
-
-      select.appendChild(option);
+    const tagCounts = {};
+    state.endpoints.forEach((ep) => {
+      (Array.isArray(ep.tags) ? ep.tags : []).forEach((tag) => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+      });
     });
+
+    container.innerHTML = "";
+
+    Object.entries(tagCounts)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .forEach(([tag, count]) => {
+        const wrapper = document.createElement("label");
+        wrapper.className = "group flex cursor-pointer items-center gap-2";
+        wrapper.innerHTML = `
+            <input type="checkbox" class="tag-checkbox h-3.5 w-3.5 accent-cyan-400">
+            <button type="button" class="tag-filter-button min-w-0 flex-1 truncate rounded px-1.5 py-1 text-left text-[11px] text-slate-400 transition hover:bg-sky-500/10 hover:text-sky-300">
+                ${escapeHtml(tag)}
+                <span class="text-slate-600">(${count})</span>
+            </button>
+        `;
+
+        const checkbox = wrapper.querySelector(".tag-checkbox");
+        checkbox.checked = state.tags.has(tag);
+        
+        checkbox.addEventListener("change", () => {
+          setTagFilter(tag, checkbox.checked);
+        });
+
+        wrapper.querySelector(".tag-filter-button").addEventListener("click", (e) => {
+          e.preventDefault();
+          const checked = !state.tags.has(tag);
+          checkbox.checked = checked;
+          setTagFilter(tag, checked);
+        });
+
+        container.appendChild(wrapper);
+      });
+  }
+
+  function setTagFilter(tag, enabled) {
+    if (enabled) {
+      state.tags.add(tag);
+    } else {
+      state.tags.delete(tag);
+    }
+    state.page = 1;
+    applyFilters();
+  }
+
+  function renderSegments() {
+    const container = document.getElementById("segmentsContainer");
+    if (!container) return;
+
+    const segmentCounts = {};
+    state.endpoints.forEach((ep) => {
+      getEndpointSegments(ep.endpoint).forEach((segment) => {
+        segmentCounts[segment] = (segmentCounts[segment] || 0) + 1;
+      });
+    });
+
+    container.innerHTML = "";
+
+    Object.entries(segmentCounts)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .forEach(([segment, count]) => {
+        const wrapper = document.createElement("label");
+        wrapper.className = "group flex cursor-pointer items-center gap-2";
+        wrapper.innerHTML = `
+            <input type="checkbox" class="segment-checkbox h-3.5 w-3.5 accent-cyan-400">
+            <button type="button" class="segment-filter-button min-w-0 flex-1 truncate rounded px-1.5 py-1 text-left text-[11px] text-slate-400 transition hover:bg-cyan-500/10 hover:text-cyan-300">
+                ${escapeHtml(segment)}
+                <span class="text-slate-600">(${count})</span>
+            </button>
+        `;
+
+        const checkbox = wrapper.querySelector(".segment-checkbox");
+        checkbox.checked = state.segments.has(segment);
+        
+        checkbox.addEventListener("change", () => {
+          setSegmentFilter(segment, checkbox.checked);
+        });
+
+        wrapper.querySelector(".segment-filter-button").addEventListener("click", (e) => {
+          e.preventDefault();
+          const checked = !state.segments.has(segment);
+          checkbox.checked = checked;
+          setSegmentFilter(segment, checked);
+        });
+
+        container.appendChild(wrapper);
+      });
+  }
+
+  function setSegmentFilter(segment, enabled) {
+    if (enabled) {
+      state.segments.add(segment);
+    } else {
+      state.segments.delete(segment);
+    }
+    state.page = 1;
+    applyFilters();
   }
 
   // ============================================================
@@ -876,13 +1017,7 @@
         applyFilters();
       });
 
-    document.getElementById("tagFilter").addEventListener("change", (event) => {
-      state.tag = event.target.value;
-
-      state.page = 1;
-
-      applyFilters();
-    });
+    // Tag filter removed as we now use sidebar
 
     document
       .getElementById("resetEndpointFilters")
@@ -934,7 +1069,8 @@
 
     state.method = "all";
 
-    state.tag = "";
+    state.tags.clear();
+    state.segments.clear();
 
     state.page = 1;
 
@@ -942,7 +1078,8 @@
 
     document.getElementById("methodFilter").value = "all";
 
-    document.getElementById("tagFilter").value = "";
+    // Uncheck sidebar inputs
+    document.querySelectorAll(".tag-checkbox, .segment-checkbox").forEach(cb => cb.checked = false);
 
     applyFilters();
   }
