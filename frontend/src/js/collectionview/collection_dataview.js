@@ -672,17 +672,12 @@
 
     const response = qpData?.response || endpoint.response || {};
 
-    document.getElementById("requestHeaders").textContent = formatData(
-      request.headers || {},
-    );
-
-    document.getElementById("requestQuery").textContent = formatData(
-      request.query || request.queryParams || {},
-    );
-
-    document.getElementById("requestBody").textContent = formatData(
-      request.body ?? "Not available",
-    );
+    const reqBodyEl = document.getElementById("requestBody");
+    if (reqBodyEl) {
+      reqBodyEl.textContent = formatData(
+        request.body ?? "Not available",
+      );
+    }
 
     document.getElementById("responseStatus").textContent = response.status
       ? String(response.status)

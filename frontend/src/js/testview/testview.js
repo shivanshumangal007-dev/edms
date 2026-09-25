@@ -3633,24 +3633,121 @@ function setupRunner() {
 
     }
 
-    if (saveButton) {
+    const saveDropdownContainer = document.getElementById("saveDropdownContainer");
+    const saveMenu = document.getElementById("saveMenu");
+    const btnUpdateQP = document.getElementById("btnUpdateQP");
+    const btnCreateQP = document.getElementById("btnCreateQP");
 
-        saveButton.type =
-            "button";
-
-        saveButton.addEventListener(
-            "click",
-            event => {
-
-                event.preventDefault();
-                event.stopPropagation();
-
-                // To be implemented or linked to save logic
-                console.log("Save clicked");
-
+    if (saveButton && saveMenu && saveDropdownContainer) {
+        saveButton.type = "button";
+        
+        saveButton.addEventListener("click", event => {
+            event.preventDefault();
+            event.stopPropagation();
+            saveMenu.classList.toggle("hidden");
+            
+            if (!saveMenu.classList.contains("hidden")) {
+                if (selectedTestQP) {
+                    btnUpdateQP.style.display = "flex";
+                } else {
+                    btnUpdateQP.style.display = "none";
+                }
             }
-        );
-
+        });
+        
+        document.addEventListener("click", event => {
+            if (!saveDropdownContainer.contains(event.target)) {
+                saveMenu.classList.add("hidden");
+            }
+        });
+        
+        btnUpdateQP.addEventListener("click", async event => {
+            event.preventDefault();
+            event.stopPropagation();
+            saveMenu.classList.add("hidden");
+            
+            const endpoint = selectedTestEndpoint;
+            if (!endpoint || !selectedTestQP) return;
+            
+            try {
+                const res = await fetch(`http://localhost:3000/test-view/${encodeURIComponent(endpoint.id)}/qps/${encodeURIComponent(selectedTestQP)}/update`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        request_body: requestContent.value,
+                        response_body: responseContent.value
+                    })
+                });
+                if (res.ok) {
+                    console.log("QP updated on backend successfully");
+                    const qp = endpoint.qps?.find(q => String(q.id) === String(selectedTestQP));
+                    if (qp) {
+                        if (!qp.request) qp.request = {};
+                        if (!qp.response) qp.response = {};
+                        qp.request.body = requestContent.value;
+                        qp.response.body = responseContent.value;
+                        saveLocalQPs(); // Keep local cache in sync just in case
+                    }
+                } else {
+                    console.error("Failed to update QP on backend");
+                }
+            } catch (e) {
+                console.error("Error updating QP:", e);
+            }
+        });
+        
+        btnCreateQP.addEventListener("click", async event => {
+            event.preventDefault();
+            event.stopPropagation();
+            saveMenu.classList.add("hidden");
+            
+            const endpoint = selectedTestEndpoint;
+            if (!endpoint) return;
+            
+            try {
+                const res = await fetch(`http://localhost:3000/test-view/${encodeURIComponent(endpoint.id)}/qps/create`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        method: endpoint.method || "GET",
+                        request_body: requestContent.value,
+                        response_body: responseContent.value
+                    })
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    if (!Array.isArray(endpoint.qps)) endpoint.qps = [];
+                    
+                    const newQp = {
+                        id: data.request_number,
+                        name: String(data.request_number),
+                        method: endpoint.method,
+                        timestamp: new Date().toISOString(),
+                        request: {
+                            body: requestContent.value,
+                            query: {},
+                            headers: {}
+                        },
+                        response: {
+                            body: responseContent.value,
+                            status: null
+                        }
+                    };
+                    
+                    endpoint.qps.push(newQp);
+                    saveLocalQPs(); // Keep local cache in sync
+                    
+                    renderTestQPs(endpoint);
+                    selectTestQP(newQp.id);
+                    console.log("QP created on backend successfully");
+                } else {
+                    console.error("Failed to create QP on backend");
+                }
+            } catch (e) {
+                console.error("Error creating QP:", e);
+            }
+        });
     }
 
     const runForm =
