@@ -169,19 +169,7 @@ function init() {
             }
 
 
-            <!-- ============================================ -->
-            <!-- BOOKMARK PREVIEW -->
-            <!-- ============================================ -->
 
-            ${
-                isSingle
-                    ? menuItem(
-                        'bookmarkpreview',
-                        iconEye(),
-                        'Bookmark Preview'
-                    )
-                    : ''
-            }
 
 
             <!-- ============================================ -->
@@ -424,24 +412,7 @@ function init() {
                     break;
 
 
-                // --------------------------------------------
-                // BOOKMARK PREVIEW
-                // --------------------------------------------
 
-                case 'bookmarkpreview':
-
-                    if (
-                        targetIds.length === 1
-                    ) {
-
-                        window.CollectionView
-                            .openBookmarkView(
-                                targetIds[0]
-                            );
-
-                    }
-
-                    break;
 
 
                 // --------------------------------------------

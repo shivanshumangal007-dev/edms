@@ -817,34 +817,7 @@
                     ${escapeHtml(folder.name)}
                 </span>
 
-                <!-- Preview (Bookmark View) button -->
-                <button
-                    type="button"
-                    class="collection-preview-btn
-                           ml-auto shrink-0
-                           flex items-center justify-center
-                           h-6 w-6 rounded-md
-                           text-slate-500
-                           opacity-0 group-hover:opacity-100
-                           hover:bg-cyan-500/15
-                           hover:text-cyan-400
-                           transition-all duration-150"
-                    title="Preview in Bookmark View"
-                >
-                    <svg
-                        class="h-3.5 w-3.5"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.8"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        aria-hidden="true"
-                    >
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                        <circle cx="12" cy="12" r="3"/>
-                    </svg>
-                </button>
+
 
             </div>
 
@@ -931,14 +904,7 @@
       renderTable();
     });
 
-    const previewBtn = row.querySelector(".collection-preview-btn");
 
-    if (previewBtn) {
-      previewBtn.addEventListener("click", (event) => {
-        event.stopPropagation();
-        openBookmarkView(id);
-      });
-    }
 
     row.querySelectorAll(".folder-tag").forEach((button) => {
       button.addEventListener("click", (event) => {
@@ -2058,22 +2024,7 @@
     );
   }
 
-  // ============================================================
-  // BOOKMARK VIEW  (opened via Preview button or right-click)
-  // ============================================================
 
-  function openBookmarkView(id) {
-    const folder = getFolder(id);
-
-    if (!folder) {
-      return;
-    }
-
-    window.open(
-      `./listview.html?collection=${encodeURIComponent(folder.name)}`,
-      "_blank",
-    );
-  }
 
   // ============================================================
   // DATA VIEW
@@ -3065,7 +3016,7 @@
 
     openTestView,
 
-    openBookmarkView,
+
 
     duplicateFolder,
 

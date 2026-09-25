@@ -5936,10 +5936,7 @@ function setupSidebarTabs() {
         "history"
     );
 
-    setupSidebarTab(
-        "bookmarksTab",
-        "bookmarks"
-    );
+
 
     setupSidebarTab(
         "endpointsTab",
@@ -5999,8 +5996,7 @@ function updateSidebarTabButtons() {
         historyTab:
             "history",
 
-        bookmarksTab:
-            "bookmarks",
+
 
         endpointsTab:
             "endpoints"
@@ -6057,9 +6053,7 @@ function updateSidebarTabUnderline() {
             "historyTab"
         ),
 
-        document.getElementById(
-            "bookmarksTab"
-        ),
+
 
         document.getElementById(
             "endpointsTab"
@@ -6089,19 +6083,7 @@ function updateSidebarTabUnderline() {
 
                 }
 
-                if (
-                    tab.id ===
-                    "bookmarksTab"
-                ) {
 
-                    return (
-                        activeSidebarTab ===
-                        "bookmarks"
-                    );
-
-                }
-
-                return (
                     activeSidebarTab ===
                     "endpoints"
                 );
