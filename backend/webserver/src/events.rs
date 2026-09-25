@@ -9,7 +9,12 @@ pub enum ServerEvent {
     ActiveWorkspaceHistoryLoaded { count: usize },
     CollectionLoaded { collection: String, moved_to_backup: bool },
     HistoryUpdated { count: usize },
-    BookmarksUpdated { count: usize },
+    /// Carries which collection changed (folder = collection name) so a
+    /// client with a specific collection open can filter to just that one
+    /// and ignore updates for collections it isn't currently showing —
+    /// needed once more than one collection can be loaded at once across
+    /// different tabs (2026-09-22).
+    BookmarksUpdated { collection: String, count: usize },
     FolderBecameActive { folder: String },
     TestStarted { endpoint_id: String, request_number: i32 },
     TestFinished {
@@ -41,6 +46,14 @@ pub enum ServerEvent {
     },
 
     ViewTagsUpdated { view: String },
+
+    /// A collection's real membership changed (save/unsave) — as opposed
+    /// to `BookmarksUpdated`, which is about the draft/bookmark state.
+    /// Previously nothing was emitted here at all (2026-09-22): a save or
+    /// unsave silently succeeded with no way for any other tab to know.
+    /// WS-triggers-a-refresh, REST-delivers-the-data, same as
+    /// ViewTagsUpdated above — re-fetch GET /collections/:name/endpoints.
+    CollectionMembershipUpdated { collection: String },
 
     QpDeleted { endpoint_id: String, request_number: i32 },
 

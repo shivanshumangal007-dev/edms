@@ -318,6 +318,12 @@ pub async fn rename_collection_entry(
                 return Err(format!("failed to rename collection file, rolled back: {e}"));
             }
 
+            // Bookmarks live in the central table keyed by folder = collection
+            // name (2026-09-22) — unlike membership/tags, which moved with the
+            // file automatically, these need an explicit cascade or they'd be
+            // stranded under the old name.
+            let _ = db::rename_bookmarks_folder(&state.core, &state.queries, &old_name, &new_name);
+
             Ok(rows)
         }
     })
@@ -362,6 +368,12 @@ pub async fn delete_collection_entry(
                     file_deleted = true;
                 }
             }
+
+            // Same cascade need as rename above: bookmarks for this
+            // collection live in the central table (folder = name), not in
+            // the file that was just deleted, so they'd be orphaned
+            // otherwise (2026-09-22).
+            let _ = db::delete_bookmarks_for_folder(&state.core, &state.queries, &name);
 
             Ok((deleted_rows, file_deleted))
         }
