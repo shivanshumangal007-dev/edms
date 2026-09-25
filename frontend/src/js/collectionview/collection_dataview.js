@@ -581,22 +581,96 @@
   // ENDPOINT SELECTION
   // ============================================================
 
-  function selectEndpoint(endpoint) {
+  async function selectEndpoint(endpoint) {
     state.selectedEndpoint = endpoint;
-
-    renderEndpointDetails(endpoint);
-
     openWindow("requestWindow");
+    
+    const eid = getEndpointId(endpoint);
+    const API_BASE = "http://localhost:3000";
+    let qps = [];
+    try {
+        const res = await fetch(`${API_BASE}/test-view/${encodeURIComponent(eid)}/qps`);
+        if (res.ok) {
+            const data = await res.json();
+            if (data && Array.isArray(data.qps)) {
+                qps = data.qps.map(qp => ({
+                    id: qp.request_number,
+                    name: String(qp.request_number)
+                }));
+            }
+        }
+    } catch (e) {
+        console.error("Failed to fetch QPs", e);
+    }
 
-    openWindow("responseWindow");
+    const qpContainer = document.getElementById("qpSelectorContainer");
+    if (qpContainer) {
+        qpContainer.innerHTML = "";
+        if (qps.length > 0) {
+            qps.forEach((qp, index) => {
+                const btn = document.createElement("button");
+                btn.className = "px-2 py-1 text-xs rounded border border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700 transition-colors";
+                btn.textContent = `QP${qp.name}`;
+                btn.onclick = () => loadQPDetails(eid, qp.id, btn);
+                qpContainer.appendChild(btn);
+                if (index === 0) {
+                    btn.click();
+                }
+            });
+        } else {
+            qpContainer.innerHTML = `<span class="text-xs text-slate-500">No QPs</span>`;
+            renderEndpointDetails(endpoint, null);
+        }
+    } else {
+        renderEndpointDetails(endpoint, null);
+    }
 
     renderTable();
   }
 
-  function renderEndpointDetails(endpoint) {
-    const request = endpoint.request || {};
+  async function loadQPDetails(endpointId, qpId, activeBtn) {
+    const qpContainer = document.getElementById("qpSelectorContainer");
+    if (qpContainer) {
+        qpContainer.querySelectorAll("button").forEach(b => {
+            b.classList.remove("border-sky-500", "text-sky-400");
+            b.classList.add("border-slate-700", "text-slate-300");
+        });
+        activeBtn.classList.remove("border-slate-700", "text-slate-300");
+        activeBtn.classList.add("border-sky-500", "text-sky-400");
+    }
 
-    const response = endpoint.response || {};
+    const API_BASE = "http://localhost:3000";
+    try {
+        const [reqRes, resRes, hdrRes] = await Promise.all([
+            fetch(`${API_BASE}/test-view/${encodeURIComponent(endpointId)}/request/${qpId}`).catch(() => null),
+            fetch(`${API_BASE}/test-view/${encodeURIComponent(endpointId)}/response/${qpId}`).catch(() => null),
+            fetch(`${API_BASE}/test-view/${encodeURIComponent(endpointId)}/headers/${qpId}`).catch(() => null)
+        ]);
+
+        const reqData = reqRes?.ok ? await reqRes.json() : null;
+        const resData = resRes?.ok ? await resRes.json() : null;
+        const hdrData = hdrRes?.ok ? await hdrRes.json() : null;
+
+        const request = {
+            headers: hdrData || {},
+            query: reqData?.query || {},
+            body: reqData?.body || null
+        };
+        const response = {
+            status: resData?.status || null,
+            body: resData?.body || resData || null
+        };
+        renderEndpointDetails(state.selectedEndpoint, { request, response });
+    } catch (e) {
+        console.error("Failed to load QP details", e);
+        renderEndpointDetails(state.selectedEndpoint, null);
+    }
+  }
+
+  function renderEndpointDetails(endpoint, qpData) {
+    const request = qpData?.request || endpoint.request || {};
+
+    const response = qpData?.response || endpoint.response || {};
 
     document.getElementById("requestHeaders").textContent = formatData(
       request.headers || {},
