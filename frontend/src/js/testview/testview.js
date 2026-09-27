@@ -3651,121 +3651,228 @@ function setupRunner() {
 
     }
 
-    const saveDropdownContainer = document.getElementById("saveDropdownContainer");
-    const saveMenu = document.getElementById("saveMenu");
-    const btnUpdateQP = document.getElementById("btnUpdateQP");
-    const btnCreateQP = document.getElementById("btnCreateQP");
+    const saveEndpointModal = document.getElementById("saveEndpointModal");
+    const saveCollectionSelect = document.getElementById("saveCollectionSelect");
+    const newCollectionInput = document.getElementById("newCollectionInput");
+    const newCollectionAnnotation = document.getElementById("newCollectionAnnotation");
+    const newCollectionTags = document.getElementById("newCollectionTags");
+    const confirmSaveBtn = document.getElementById("confirmSaveBtn");
+    const cancelSaveBtn = document.getElementById("cancelSaveBtn");
+    const closeSaveModal = document.getElementById("closeSaveModal");
 
-    if (saveButton && saveMenu && saveDropdownContainer) {
+    const toggleExistingCol = document.getElementById("toggleExistingCol");
+    const toggleNewCol = document.getElementById("toggleNewCol");
+    const existingColSection = document.getElementById("existingColSection");
+    const newColSection = document.getElementById("newColSection");
+    
+    let isSavingToNewCol = false;
+    
+    if (toggleExistingCol && toggleNewCol) {
+        toggleExistingCol.addEventListener("click", () => {
+            isSavingToNewCol = false;
+            existingColSection.classList.remove("hidden");
+            newColSection.classList.add("hidden");
+            
+            toggleExistingCol.classList.remove("text-slate-400", "hover:text-white");
+            toggleExistingCol.classList.add("bg-slate-800", "text-white", "shadow-sm");
+            
+            toggleNewCol.classList.add("text-slate-400", "hover:text-white");
+            toggleNewCol.classList.remove("bg-slate-800", "text-white", "shadow-sm");
+        });
+        
+        toggleNewCol.addEventListener("click", () => {
+            isSavingToNewCol = true;
+            newColSection.classList.remove("hidden");
+            existingColSection.classList.add("hidden");
+            
+            toggleNewCol.classList.remove("text-slate-400", "hover:text-white");
+            toggleNewCol.classList.add("bg-slate-800", "text-white", "shadow-sm");
+            
+            toggleExistingCol.classList.add("text-slate-400", "hover:text-white");
+            toggleExistingCol.classList.remove("bg-slate-800", "text-white", "shadow-sm");
+        });
+    }
+
+    if (saveButton) {
         saveButton.type = "button";
         
-        saveButton.addEventListener("click", event => {
-            event.preventDefault();
-            event.stopPropagation();
-            saveMenu.classList.toggle("hidden");
+        saveButton.addEventListener("click", async (e) => {
+            e.preventDefault();
             
-            if (!saveMenu.classList.contains("hidden")) {
-                if (selectedTestQP) {
-                    btnUpdateQP.style.display = "flex";
-                } else {
-                    btnUpdateQP.style.display = "none";
-                }
+            // If already in a collection context, just save it directly
+            if (activeCollectionFilter) {
+                await saveToCollection(activeCollectionFilter);
+                return;
             }
-        });
-        
-        document.addEventListener("click", event => {
-            if (!saveDropdownContainer.contains(event.target)) {
-                saveMenu.classList.add("hidden");
-            }
-        });
-        
-        btnUpdateQP.addEventListener("click", async event => {
-            event.preventDefault();
-            event.stopPropagation();
-            saveMenu.classList.add("hidden");
             
-            const endpoint = selectedTestEndpoint;
-            if (!endpoint || !selectedTestQP) return;
-            
-            try {
-                const res = await fetch(`http://localhost:3000/test-view/${encodeURIComponent(endpoint.id)}/qps/${encodeURIComponent(selectedTestQP)}/update`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        request_body: requestContent.value,
-                        response_body: responseContent.value
-                    })
-                });
-                if (res.ok) {
-                    console.log("QP updated on backend successfully");
-                    const qp = endpoint.qps?.find(q => String(q.id) === String(selectedTestQP));
-                    if (qp) {
-                        if (!qp.request) qp.request = {};
-                        if (!qp.response) qp.response = {};
-                        qp.request.body = requestContent.value;
-                        qp.response.body = responseContent.value;
-                        saveLocalQPs(); // Keep local cache in sync just in case
+            // Otherwise show modal to pick/create a collection
+            if (saveEndpointModal) {
+                saveEndpointModal.classList.remove("hidden");
+                // Fetch list of collections
+                try {
+                    const res = await fetch('http://localhost:3000/collections/list');
+                    if (res.ok) {
+                        const data = await res.json();
+                        if (saveCollectionSelect) {
+                            saveCollectionSelect.innerHTML = '<option value="" disabled selected>Select a collection</option>';
+                            const collections = Array.isArray(data.items) ? data.items : [];
+                            collections.forEach(c => {
+                                const opt = document.createElement("option");
+                                opt.value = c.name;
+                                opt.textContent = c.name;
+                                saveCollectionSelect.appendChild(opt);
+                            });
+                        }
                     }
-                } else {
-                    console.error("Failed to update QP on backend");
+                } catch (e) {
+                    console.error("Failed to load collections", e);
                 }
-            } catch (e) {
-                console.error("Error updating QP:", e);
             }
         });
         
-        btnCreateQP.addEventListener("click", async event => {
-            event.preventDefault();
-            event.stopPropagation();
-            saveMenu.classList.add("hidden");
+        const closeSave = () => {
+            if (saveEndpointModal) saveEndpointModal.classList.add("hidden");
+            if (newCollectionInput) newCollectionInput.value = "";
+            if (newCollectionAnnotation) newCollectionAnnotation.value = "";
+            if (newCollectionTags) newCollectionTags.value = "";
+            if (saveCollectionSelect) saveCollectionSelect.value = "";
+            if (toggleExistingCol) toggleExistingCol.click();
+        };
+        
+        closeSaveModal?.addEventListener("click", closeSave);
+        cancelSaveBtn?.addEventListener("click", closeSave);
+        
+        confirmSaveBtn?.addEventListener("click", async () => {
+            let collectionName = isSavingToNewCol ? newCollectionInput?.value.trim() : saveCollectionSelect?.value;
             
-            const endpoint = selectedTestEndpoint;
-            if (!endpoint) return;
+            if (!collectionName) {
+                alert("Please select or create a collection.");
+                return;
+            }
             
-            try {
-                const res = await fetch(`http://localhost:3000/test-view/${encodeURIComponent(endpoint.id)}/qps/create`, {
+            // If creating a new collection
+            if (isSavingToNewCol) {
+                try {
+                    const annotation = newCollectionAnnotation?.value.trim();
+                    const payload = { name: collectionName };
+                    if (annotation) payload.annotation = annotation;
+                    
+                    await fetch('http://localhost:3000/collections/create', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    
+                    const tagsRaw = newCollectionTags?.value.trim();
+                    if (tagsRaw) {
+                        const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
+                        for (const t of tags) {
+                            await fetch(`http://localhost:3000/collections/${encodeURIComponent(collectionName)}/membership-tags/add`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ tag: t })
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.error("Failed to create collection or add tags", e);
+                }
+            }
+            
+            await saveToCollection(collectionName);
+            closeSave();
+        });
+    }
+
+    async function saveToCollection(collectionName) {
+        const method = testMethod?.value || "GET";
+        const endpointStr = getCurrentEndpointInput();
+        
+        if (!endpointStr) {
+            alert("Please enter a URL first.");
+            return;
+        }
+        
+        let endpointId = null;
+        let isNewEndpoint = false;
+        
+        try {
+            const lookupUrl = new URL('http://localhost:3000/endpoints/lookup');
+            lookupUrl.searchParams.set('endpoint_str', endpointStr);
+            lookupUrl.searchParams.set('method', method);
+            let res = await fetch(lookupUrl);
+            
+            if (res.ok) {
+                const data = await res.json();
+                endpointId = data?.endpoint?.endpoint_id || data?.endpoint?.id || data?.endpoint_id || data?.id;
+            } else if (res.status === 404) {
+                // Create it if it doesn't exist
+                const endpointAnnotation = document.getElementById("annotations")?.value || "";
+                res = await fetch('http://localhost:3000/endpoints/create', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        method: endpoint.method || "GET",
-                        request_body: requestContent.value,
-                        response_body: responseContent.value
+                    body: JSON.stringify({ 
+                        endpoint_str: endpointStr, 
+                        method: method,
+                        annotation: endpointAnnotation 
                     })
                 });
-                
                 if (res.ok) {
                     const data = await res.json();
-                    if (!Array.isArray(endpoint.qps)) endpoint.qps = [];
-                    
-                    const newQp = {
-                        id: data.request_number,
-                        name: String(data.request_number),
-                        method: endpoint.method,
-                        timestamp: new Date().toISOString(),
-                        request: {
-                            body: requestContent.value,
-                            query: {},
-                            headers: {}
-                        },
-                        response: {
-                            body: responseContent.value,
-                            status: null
-                        }
-                    };
-                    
-                    endpoint.qps.push(newQp);
-                    saveLocalQPs(); // Keep local cache in sync
-                    
-                    renderTestQPs(endpoint);
-                    selectTestQP(newQp.id);
-                    console.log("QP created on backend successfully");
-                } else {
-                    console.error("Failed to create QP on backend");
+                    endpointId = data.id || data.endpoint_id;
+                    isNewEndpoint = true;
                 }
-            } catch (e) {
-                console.error("Error creating QP:", e);
             }
-        });
+        } catch (e) {
+            console.error("Error ensuring endpoint:", e);
+        }
+        
+        if (!endpointId) {
+            alert("Failed to lookup or create endpoint.");
+            return;
+        }
+
+        // Ensure selectedTestEndpoint has the ID
+        if (selectedTestEndpoint && !selectedTestEndpoint.id) {
+            selectedTestEndpoint.id = endpointId;
+        }
+
+        // Sync local tags to backend for this endpoint
+        if (selectedTestEndpoint && Array.isArray(selectedTestEndpoint.tags)) {
+            for (const tag of selectedTestEndpoint.tags) {
+                try {
+                    await fetch(`http://localhost:3000/tags/${encodeURIComponent(endpointId)}/add`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ tag })
+                    });
+                } catch (e) {
+                    console.error("Failed to sync tag:", tag, e);
+                }
+            }
+        }
+        
+        // Save to bookmarks of that collection
+        try {
+            const res = await fetch(`http://localhost:3000/test-view/save/bookmark`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    collection: collectionName,
+                    endpoint_id: endpointId,
+                    notes: document.getElementById("annotations")?.value || ""
+                })
+            });
+            if (res.ok) {
+                console.log(`Saved endpoint ${endpointId} to collection ${collectionName}`);
+                alert(`Endpoint saved to collection '${collectionName}'!`);
+            } else {
+                alert("Failed to save endpoint to collection.");
+            }
+        } catch (e) {
+            console.error("Failed to save to collection", e);
+            alert("Failed to save endpoint to collection.");
+        }
     }
 
     const runForm =
@@ -5365,10 +5472,18 @@ function setupTags() {
 
 async function addTestTag() {
 
-    if (!selectedTestEndpoint) {
-
+    const endpointStr = getCurrentEndpointInput();
+    if (!selectedTestEndpoint && !endpointStr) {
         return;
+    }
 
+    if (!selectedTestEndpoint) {
+        selectedTestEndpoint = {
+            id: null,
+            endpoint_str: endpointStr,
+            method: testMethod?.value || "GET",
+            tags: []
+        };
     }
 
     const tag =
@@ -5406,73 +5521,35 @@ async function addTestTag() {
 
     }
 
-    try {
-
-        /*
-         * Persist through the actual backend
-         * endpoint-tags API first.
-         */
-
-        await addEndpointTag(
-            selectedTestEndpoint.id,
-            tag
-        );
-
-        /*
-         * Update local state only after the
-         * backend operation succeeds.
-         */
-
-        selectedTestEndpoint.tags.push(
-            tag
-        );
-
-        const endpoint =
-            findEndpoint(
-                selectedTestEndpoint.id
-            );
-
-        if (endpoint) {
-
-            endpoint.tags =
-                selectedTestEndpoint.tags;
-
+    // Try adding to backend if it has an ID, otherwise just add locally
+    if (selectedTestEndpoint.id) {
+        try {
+            await addEndpointTag(selectedTestEndpoint.id, tag);
+        } catch (error) {
+            console.error("Failed to add endpoint tag:", error);
+            window.alert(error?.message || "Could not add tag.");
+            return; // Don't add locally if backend fails for existing endpoint
         }
-
-        if (tagInput) {
-
-            tagInput.value =
-                "";
-
-        }
-
-        renderSelectedEndpointTags();
-
-        applyTestFilters();
-
-        console.log(
-            "Endpoint tag added:",
-            {
-                endpointId:
-                    selectedTestEndpoint.id,
-
-                tag
-            }
-        );
-
-    } catch (error) {
-
-        console.error(
-            "Failed to add endpoint tag:",
-            error
-        );
-
-        window.alert(
-            error?.message ||
-            "Could not add tag."
-        );
-
     }
+    
+    // Add locally
+    selectedTestEndpoint.tags.push(tag);
+    
+    if (selectedTestEndpoint.id) {
+        const endpoint = findEndpoint(selectedTestEndpoint.id);
+        if (endpoint) {
+            endpoint.tags = selectedTestEndpoint.tags;
+        }
+    }
+
+    if (tagInput) {
+        tagInput.value = "";
+    }
+    
+    renderSelectedEndpointTags();
+    applyTestFilters();
+
+    console.log("Endpoint tag added locally:", { endpointId: selectedTestEndpoint.id, tag });
 
 }
 
