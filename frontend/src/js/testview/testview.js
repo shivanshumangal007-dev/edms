@@ -2484,6 +2484,8 @@ function renderTestQP(
     selectedQPIds =
         new Set();
 
+    if (!endpoint) return;
+
     if (
         !Array.isArray(endpoint.qps)
     ) {
