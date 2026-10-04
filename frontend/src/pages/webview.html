@@ -8,7 +8,7 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>EDMS Collection View</title>
+    <title>EDMS Web View</title>
 
     <link
         href="../styles/output.css"
@@ -25,7 +25,7 @@
 <body
     class="min-h-screen overflow-hidden bg-slate-950
            font-[Inter] text-slate-100"
-    data-current-page="collection"
+    data-current-page="web"
 >
 
 
@@ -59,17 +59,17 @@
                         class="truncate text-xl font-bold
                                tracking-tight text-white sm:text-2xl"
                     >
-                        Collections
+                        Web View
                     </h1>
 
                     <p class="text-[11px] text-slate-400 sm:text-xs">
-                        Collection &amp; folder management
+                        Websitory folder management
                     </p>
 
                 </div>
 
 
-               <!-- Navigation -->
+                <!-- Navigation -->
                 <nav class="navbar
                             flex
                             items-center
@@ -124,19 +124,21 @@
                     </button>
                     <!-- Import / Export -->
                     <button id="importexportnav" data-target="./import_export.html" data-page="import_export" class="nav-button
-                                   rounded-lg
-                                   px-3.5 py-1.5
-                                   text-sm
-                                   font-medium
-                                   text-slate-400
-                                   transition
-                                   hover:bg-slate-700
-                                   hover:text-white">
+                                     px-3.5
+                        py-1.5
+                        rounded-lg
+                        text-sm
+                        font-medium
+                        bg-cyan-500
+                        text-white
+                        shadow-lg
+                        shadow-cyan-500/30">
 
                         Import / Export
                     </button>
 
 
+                    
                     <!-- Repo View -->
                     <button id="reponav" data-target="./repoview.html" data-page="repo" class="nav-button
                                    rounded-lg
@@ -147,11 +149,9 @@
                                    transition
                                    hover:bg-slate-700
                                    hover:text-white">
-
                         Repo View
                     </button>
-
-                    <!-- Web View -->
+<!-- Web View -->
                     <button id="webnav" data-target="./webview.html" data-page="web" class="nav-button
                                    rounded-lg
                                    px-3.5 py-1.5
@@ -161,6 +161,7 @@
                                    transition
                                    hover:bg-slate-700
                                    hover:text-white">
+
                         Web View
                     </button>
                 </nav>
@@ -199,9 +200,9 @@
                     </svg>
 
                     <input
-                        id="collectionSearch"
+                        id="webSearch"
                         type="search"
-                        placeholder="Search collections..."
+                        placeholder="Search web views..."
                         class="h-8 w-full rounded-md
                                border border-slate-800
                                bg-slate-800/80 pl-8 pr-3
@@ -215,19 +216,22 @@
                 </div>
 
 
-                <!-- Purpose -->
+                <!-- CRUD -->
 
                 <select
-                    id="purposeFilter"
+                    id="crudFilter"
                     class="h-8 rounded-md
                            border border-slate-800
                            bg-slate-800 px-2.5 text-xs
                            outline-none
                            focus:border-cyan-500"
                 >
-                    <option value="all">All Purpose</option>
-                    <option value="importable">Importable</option>
-                    <option value="exportable">Exportable</option>
+                    <option value="all">CRUD: All</option>
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                    <option value="PUT">PUT</option>
+                    <option value="PATCH">PATCH</option>
+                    <option value="DELETE">DELETE</option>
                 </select>
 
 
@@ -266,7 +270,7 @@
                 <!-- New -->
 
                 <button
-                    id="newCollectionBtn"
+                    id="createWebBtn"
                     type="button"
                     class="inline-flex h-8 items-center
                            gap-1.5 rounded-md
@@ -290,68 +294,6 @@
 
                 </button>
 
-
-                <!-- Selection actions -->
-
-                <div class="ml-auto flex items-center gap-2">
-
-                    <button
-                        id="importBtn"
-                        type="button"
-                        class="inline-flex h-8 items-center
-                               gap-1.5 rounded-md
-                               border border-slate-700
-                               bg-slate-800 px-2.5
-                               text-xs text-slate-300
-                               transition hover:bg-slate-700"
-                    >
-
-                        <svg
-                            class="h-3.5 w-3.5"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.8"
-                        >
-                            <path d="M12 3v12"/>
-                            <path d="m7 10 5 5 5-5"/>
-                            <path d="M5 21h14"/>
-                        </svg>
-
-                        Import
-
-                    </button>
-
-
-                    <button
-                        id="exportBtn"
-                        type="button"
-                        class="inline-flex h-8 items-center
-                               gap-1.5 rounded-md
-                               border border-slate-700
-                               bg-slate-800 px-2.5
-                               text-xs text-slate-300
-                               transition hover:bg-slate-700"
-                    >
-
-                        <svg
-                            class="h-3.5 w-3.5"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            stroke-width="1.8"
-                        >
-                            <path d="M12 21V9"/>
-                            <path d="m17 14-5-5-5 5"/>
-                            <path d="M5 3h14"/>
-                        </svg>
-
-                        Export
-
-                    </button>
-
-                </div>
-
             </section>
 
 
@@ -369,7 +311,7 @@
             >
 
                 <span
-                    id="selectedFolderCount"
+                    id="selectedWebCount"
                     class="rounded-md bg-cyan-500/10
                            px-2 py-1 text-xs font-medium
                            text-cyan-300"
@@ -379,7 +321,7 @@
 
 
                 <div
-                    id="selectedFolderList"
+                    id="selectedWebList"
                     class="flex min-w-0 flex-1
                            items-center gap-1.5
                            overflow-x-auto"
@@ -387,17 +329,7 @@
 
 
                 <button
-                    id="tagsManager"
-                    type="button"
-                    class="shrink-0 text-xs
-                           text-cyan-400
-                           hover:text-cyan-300 border-2 border-cyan-500 rounded-md px-2 py-1"
-                >
-                    Tags operations
-                </button>
-
-                <button
-                    id="clearFolderSelection"
+                    id="clearWebSelection"
                     type="button"
                     class="shrink-0 text-xs
                            text-slate-400
@@ -508,31 +440,11 @@
                                     <span
                                         class="text-xs text-slate-500"
                                     >
-                                        Collections
+                                        Web Views
                                     </span>
 
                                     <span
-                                        id="folderStat"
-                                        class="text-xs font-medium
-                                               text-slate-300"
-                                    >
-                                        0
-                                    </span>
-                                </div>
-
-
-                                <div
-                                    class="flex items-center
-                                           justify-between"
-                                >
-                                    <span
-                                        class="text-xs text-slate-500"
-                                    >
-                                        Endpoints
-                                    </span>
-
-                                    <span
-                                        id="endpointStat"
+                                        id="webStat"
                                         class="text-xs font-medium
                                                text-slate-300"
                                     >
@@ -568,7 +480,16 @@
                                     <span
                                         class="text-xs text-slate-500"
                                     >
-                                      
+                                        Segments
+                                    </span>
+
+                                    <span
+                                        id="segmentStat"
+                                        class="text-xs font-medium
+                                               text-slate-300"
+                                    >
+                                        0
+                                    </span>
                                 </div>
 
                             </div>
@@ -602,6 +523,32 @@
                         </section>
 
 
+                        <!-- Segments -->
+
+                        <section class="mb-5">
+
+                            <div
+                                class="mb-2 border-b
+                                       border-slate-800
+                                       pb-1.5"
+                            >
+                                <h3
+                                    class="text-xs font-semibold
+                                           text-slate-300"
+                                >
+                                    Segments
+                                </h3>
+                            </div>
+
+
+                            <div
+                                id="segmentsContainer"
+                                class="flex flex-col gap-1.5"
+                            ></div>
+
+                        </section>
+
+
                     </div>
 
                 </aside>
@@ -619,8 +566,6 @@
                     <div class="flex h-full min-w-0 flex-col">
 
 
-                        <!-- Table -->
-
                         <div
                             id="tableScroll"
                             class="min-h-0 flex-1
@@ -632,8 +577,8 @@
                         >
 
                             <table
-                                class="w-full min-w-[1050px]
-                                       table-fixed text-xs"
+                                class="w-full min-w-[1250px]
+                                       text-xs"
                             >
 
                                 <thead
@@ -648,11 +593,9 @@
                                                text-slate-400"
                                     >
 
-                                        <th
-                                            class="w-10 px-2 py-2.5"
-                                        >
+                                        <th class="w-10 px-2 py-2.5">
                                             <input
-                                                id="selectAllFolders"
+                                                id="selectAllWebs"
                                                 type="checkbox"
                                                 class="h-3.5 w-3.5
                                                        accent-cyan-400"
@@ -660,95 +603,30 @@
                                             >
                                         </th>
 
+                                        <th class="px-2 py-2.5 whitespace-nowrap">Folder Name</th>
+                                        <th class="px-2 py-2.5 whitespace-nowrap">Tags</th>
+                                        <th class="px-2 py-2.5 whitespace-nowrap">Date Created</th>
 
-                                        <th
-                                            class="w-[19%]
-                                                   px-2 py-2.5"
-                                        >
-                                            Folder
-                                        </th>
+                                        <th class="w-12 px-1 py-2.5 text-center" title="GET endpoints">GET</th>
+                                        <th class="w-12 px-1 py-2.5 text-center" title="POST endpoints">POST</th>
+                                        <th class="w-12 px-1 py-2.5 text-center" title="PUT endpoints">PUT</th>
+                                        <th class="w-12 px-1 py-2.5 text-center" title="PATCH endpoints">PATCH</th>
+                                        <th class="w-12 px-1 py-2.5 text-center" title="DELETE endpoints">DEL</th>
 
-
-                                        
-
-
-                                        <th
-                                            class="w-[17%]
-                                                   px-2 py-2.5"
-                                        >
-                                            Tags
-                                        </th>
-
-
-                                        <!-- CRUD -->
-
-                                        <th
-                                            class="w-12 px-1 py-2.5
-                                                   text-center"
-                                            title="GET endpoints"
-                                        >
-                                            GET
-                                        </th>
-
-
-                                        <th
-                                            class="w-12 px-1 py-2.5
-                                                   text-center"
-                                            title="POST endpoints"
-                                        >
-                                            POST
-                                        </th>
-
-
-                                        <th
-                                            class="w-12 px-1 py-2.5
-                                                   text-center"
-                                            title="PUT endpoints"
-                                        >
-                                            PUT
-                                        </th>
-
-
-                                        <th
-                                            class="w-12 px-1 py-2.5
-                                                   text-center"
-                                            title="PATCH endpoints"
-                                        >
-                                            PATCH
-                                        </th>
-
-
-                                        <th
-                                            class="w-12 px-1 py-2.5
-                                                   text-center"
-                                            title="DELETE endpoints"
-                                        >
-                                            DEL
-                                        </th>
-
-
-                                        <th
-                                            class="w-20 px-2 py-2.5"
-                                        >
-                                            Size
-                                        </th>
-
-
-                                        <th
-                                            class="w-[20%]
-                                                   px-2 py-2.5"
-                                        >
-                                            Annotation
-                                        </th>
+                                        <th class="px-2 py-2.5 whitespace-nowrap">Size</th>
+                                        <th class="px-2 py-2.5 whitespace-nowrap">EID Count</th>
+                                        <th class="px-2 py-2.5 whitespace-nowrap">Segments</th>
+                                        <th class="px-2 py-2.5 whitespace-nowrap">Tags in Data</th>
+                                        <th class="px-2 py-2.5 whitespace-nowrap">QP Count</th>
+                                        <th class="px-2 py-2.5 whitespace-nowrap">Index Lists</th>
+                                        <th class="px-2 py-2.5 whitespace-nowrap">Annotation</th>
 
                                     </tr>
 
                                 </thead>
 
 
-                                <tbody
-                                    id="folderTableBody"
-                                ></tbody>
+                                <tbody id="webTableBody"></tbody>
 
                             </table>
 
@@ -766,59 +644,28 @@
                                    px-3 py-2.5"
                         >
 
-                            <p
-                                class="text-[11px]
-                                       text-slate-500"
-                            >
+                            <p class="text-[11px] text-slate-500">
 
                                 Showing
 
-                                <span
-                                    id="paginationRangeStart"
-                                    class="font-medium
-                                           text-slate-300"
-                                >
-                                    0
-                                </span>
-
+                                <span id="webRangeStart" class="font-medium text-slate-300">0</span>
                                 –
-
-                                <span
-                                    id="paginationRangeEnd"
-                                    class="font-medium
-                                           text-slate-300"
-                                >
-                                    0
-                                </span>
-
+                                <span id="webRangeEnd" class="font-medium text-slate-300">0</span>
                                 of
-
-                                <span
-                                    id="paginationTotal"
-                                    class="font-medium
-                                           text-slate-300"
-                                >
-                                    0
-                                </span>
-
-                                collections
+                                <span id="webTotal" class="font-medium text-slate-300">0</span>
+                                web views
 
                             </p>
 
 
-                            <div
-                                class="flex items-center
-                                       gap-1"
-                            >
+                            <div class="flex items-center gap-1">
 
                                 <button
-                                    id="paginationPrev"
+                                    id="webPrev"
                                     type="button"
                                     class="min-w-7 rounded-md
-                                           border
-                                           border-slate-700
-                                           px-2 py-1
-                                           text-[11px]
+                                           border border-slate-700
+                                           px-2 py-1 text-[11px]
                                            text-slate-400
                                            transition
                                            hover:bg-slate-800
@@ -830,21 +677,15 @@
                                 </button>
 
 
-                                <div
-                                    id="paginationNumbers"
-                                    class="flex items-center
-                                           gap-1"
-                                ></div>
+                                <div id="webPagination" class="flex items-center gap-1"></div>
 
 
                                 <button
-                                    id="paginationNext"
+                                    id="webNext"
                                     type="button"
                                     class="min-w-7 rounded-md
-                                           border
-                                           border-slate-700
-                                           px-2 py-1
-                                           text-[11px]
+                                           border border-slate-700
+                                           px-2 py-1 text-[11px]
                                            text-slate-400
                                            transition
                                            hover:bg-slate-800
@@ -875,9 +716,10 @@
     ========================================================== -->
 
     <div
-    id="contextMenu"
-    class="hidden fixed z-[1000] w-56 overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-2xl shadow-black/50"
-></div>
+        id="contextMenu"
+        class="hidden fixed z-[1000] w-56 overflow-hidden rounded-lg border border-slate-700 bg-slate-900 shadow-2xl shadow-black/50"
+    ></div>
+
 
     <!-- =========================================================
          MODAL
@@ -903,10 +745,10 @@
 
     </div>
 
+
     <script src="../api/edms-api.js"></script>
-    <script src="../js/tags_manager.js"></script>
-    <script src="../js/collectionview/collectionview.js"></script>
-    <script src="../js/collectionview/rmbcv.js"></script>
+    <script src="../js/web_view/webview.js"></script>
+    <script src="../js/web_view/rmbrv.js"></script>
     <script src="../js/nav-bar.js"></script>
 
 </body>
