@@ -3657,6 +3657,12 @@ function setupRunner() {
     const saveMenu = document.getElementById("saveMenu");
     const btnUpdateQP = document.getElementById("btnUpdateQP");
     const btnCreateQP = document.getElementById("btnCreateQP");
+    const btnAddToCollection = document.getElementById("btnAddToCollection");
+    const addToCollectionModal = document.getElementById("addToCollectionModal");
+    const closeAddToCollectionModal = document.getElementById("closeAddToCollectionModal");
+    const cancelAddToCollectionBtn = document.getElementById("cancelAddToCollectionBtn");
+    const confirmAddToCollectionBtn = document.getElementById("confirmAddToCollectionBtn");
+    const collectionSelect = document.getElementById("collectionSelect");
 
     if (saveButton && saveMenu && saveDropdownContainer) {
         saveButton.type = "button";
@@ -3690,7 +3696,7 @@ function setupRunner() {
             if (!endpoint || !selectedTestQP) return;
             
             try {
-                const res = await fetch(`http://localhost:3000/test-view/${encodeURIComponent(endpoint.id)}/qps/${encodeURIComponent(selectedTestQP)}/update`, {
+                const res = await fetch(`http://localhost:3000/test-view/${encodeURIComponent(endpoint.id)}/qps/${encodeURIComponent(selectedTestQP.id)}/update`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -3700,13 +3706,16 @@ function setupRunner() {
                 });
                 if (res.ok) {
                     console.log("QP updated on backend successfully");
-                    const qp = endpoint.qps?.find(q => String(q.id) === String(selectedTestQP));
+                    const qp = endpoint.qps?.find(q => String(q.id) === String(selectedTestQP.id));
                     if (qp) {
                         if (!qp.request) qp.request = {};
                         if (!qp.response) qp.response = {};
                         qp.request.body = requestContent.value;
                         qp.response.body = responseContent.value;
                         saveLocalQPs(); // Keep local cache in sync just in case
+                        
+                        // Force UI refresh for the updated QP
+                        renderTestQP(endpoint, selectedTestQP.id);
                     }
                 } else {
                     console.error("Failed to update QP on backend");
@@ -3758,8 +3767,7 @@ function setupRunner() {
                     endpoint.qps.push(newQp);
                     saveLocalQPs(); // Keep local cache in sync
                     
-                    renderTestQPs(endpoint);
-                    selectTestQP(newQp.id);
+                    renderTestQP(endpoint, newQp.id);
                     console.log("QP created on backend successfully");
                 } else {
                     console.error("Failed to create QP on backend");
@@ -3768,6 +3776,98 @@ function setupRunner() {
                 console.error("Error creating QP:", e);
             }
         });
+
+        if (btnAddToCollection) {
+            btnAddToCollection.addEventListener("click", async event => {
+                event.preventDefault();
+                event.stopPropagation();
+                saveMenu.classList.add("hidden");
+                
+                const endpoint = selectedTestEndpoint;
+                if (!endpoint) {
+                    window.alert("No endpoint selected.");
+                    return;
+                }
+                
+                try {
+                    const collectionsRes = await window.EdmsAPI.listCollections();
+                    let collections = [];
+                    if (collectionsRes && collectionsRes.ok && collectionsRes.data) {
+                        if (Array.isArray(collectionsRes.data)) collections = collectionsRes.data;
+                        else if (Array.isArray(collectionsRes.data.collections)) collections = collectionsRes.data.collections;
+                        else if (Array.isArray(collectionsRes.data.items)) collections = collectionsRes.data.items;
+                    }
+
+                    if (collections.length === 0) {
+                        window.alert("No collections found.");
+                        return;
+                    }
+                    
+                    if (collectionSelect) {
+                        collectionSelect.innerHTML = "";
+                        collections.forEach(c => {
+                            const cname = c.name || c.collection_name || c.collection || "";
+                            if (!cname) return;
+                            const option = document.createElement("option");
+                            option.value = cname;
+                            option.textContent = cname;
+                            collectionSelect.appendChild(option);
+                        });
+                    }
+                    
+                    if (addToCollectionModal) {
+                        addToCollectionModal.showModal();
+                    }
+                } catch (e) {
+                    console.error("Error fetching collections:", e);
+                    window.alert("Failed to fetch collections.");
+                }
+            });
+        }
+        
+        const closeCollectionModal = () => {
+            if (addToCollectionModal && addToCollectionModal.open) {
+                addToCollectionModal.close();
+            }
+        };
+        
+        if (closeAddToCollectionModal) closeAddToCollectionModal.addEventListener("click", closeCollectionModal);
+        if (cancelAddToCollectionBtn) cancelAddToCollectionBtn.addEventListener("click", closeCollectionModal);
+        
+        if (confirmAddToCollectionBtn) {
+            confirmAddToCollectionBtn.addEventListener("click", async () => {
+                const endpoint = selectedTestEndpoint;
+                if (!endpoint) return;
+                
+                const selectedCollection = collectionSelect ? collectionSelect.value : null;
+                if (!selectedCollection) return;
+                
+                try {
+                    // Add via WebSocket
+                    await window.EdmsAPI.addActiveBookmark(selectedCollection, endpoint.id);
+                    
+                    // Also attempt REST save to persist the change immediately
+                    try {
+                        await window.EdmsAPI.saveActiveBookmark(selectedCollection, endpoint.id);
+                    } catch (e) {
+                        console.warn("REST saveActiveBookmark returned an error, but WS may have succeeded", e);
+                    }
+                    
+                    console.log(`Added endpoint ${endpoint.id} to collection ${selectedCollection}`);
+                    
+                    // Update UI if we are in this collection
+                    if (activeCollectionFilter === selectedCollection) {
+                        await loadBookmarksFromBackend();
+                        applyTestFilters();
+                    }
+                    
+                    closeCollectionModal();
+                } catch (e) {
+                    console.error("Error adding to collection:", e);
+                    window.alert("Failed to add to collection: " + e.message);
+                }
+            });
+        }
     }
 
     const runForm =
