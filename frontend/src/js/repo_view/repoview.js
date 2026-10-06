@@ -89,19 +89,30 @@
 
             const data = response.data;
             let list = [];
-            if (Array.isArray(data)) {
+            if (data && Array.isArray(data.items)) {
+                list = data.items;
+            } else if (Array.isArray(data)) {
                 list = data;
-            } else if (data && Array.isArray(data.repoviews)) {
-                list = data.repoviews;
-            } else if (data && Array.isArray(data.repoViews)) {
-                list = data.repoViews;
-            } else if (data && Array.isArray(data.data)) {
-                list = data.data;
             }
 
-            state.repos = list;
+            // Map the backend items to the structure expected by the frontend table
+            state.repos = list.map((item, index) => {
+                return {
+                    id: nextId + index, // Generate temporary ID since backend doesn't provide one
+                    name: item.name,
+                    annotation: item.annotation || '',
+                    dateCreated: item.created_at ? item.created_at.split(' ')[0] : '',
+                    dataSizeBytes: 0,
+                    eidCount: item.endpoint_count || 0,
+                    segments: 0,
+                    dataTags: [],
+                    tags: [], // Tags aren't attached to the list view in the backend yet
+                    qpCount: 0,
+                    indexLists: 0
+                };
+            });
 
-            nextId = Math.max(10000, ...state.repos.map(item => Number(item.id) || 0)) + 1;
+            nextId += state.repos.length;
 
             state.repos.forEach(item => {
                 sizeUnits[item.id] = 'MB';
