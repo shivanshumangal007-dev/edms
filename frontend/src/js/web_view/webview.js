@@ -348,16 +348,7 @@
                 ${escapeHtml(web.dateCreated || '—')}
             </td>
 
-            <!-- GET -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.GET, 'text-emerald-400')}</td>
-            <!-- POST -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.POST, 'text-sky-400')}</td>
-            <!-- PUT -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.PUT, 'text-amber-400')}</td>
-            <!-- PATCH -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.PATCH, 'text-violet-400')}</td>
-            <!-- DELETE -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.DELETE, 'text-rose-400')}</td>
+
 
             <!-- Size -->
             <td class="px-2 py-2">

@@ -78,14 +78,28 @@
     async function loadData() {
 
         try {
+            if (!window.EdmsAPI) {
+                console.warn('EdmsAPI not loaded yet');
+                return;
+            }
 
-            const response = await fetch(DATA_URL);
+            const response = await window.EdmsAPI.listRepoviews();
 
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-            const json = await response.json();
+            const data = response.data;
+            let list = [];
+            if (Array.isArray(data)) {
+                list = data;
+            } else if (data && Array.isArray(data.repoviews)) {
+                list = data.repoviews;
+            } else if (data && Array.isArray(data.repoViews)) {
+                list = data.repoViews;
+            } else if (data && Array.isArray(data.data)) {
+                list = data.data;
+            }
 
-            state.repos = Array.isArray(json.repoViews) ? json.repoViews : [];
+            state.repos = list;
 
             nextId = Math.max(10000, ...state.repos.map(item => Number(item.id) || 0)) + 1;
 
@@ -334,16 +348,7 @@
                 ${escapeHtml(repo.dateCreated || '—')}
             </td>
 
-            <!-- GET -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(repo.crud?.GET, 'text-emerald-400')}</td>
-            <!-- POST -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(repo.crud?.POST, 'text-sky-400')}</td>
-            <!-- PUT -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(repo.crud?.PUT, 'text-amber-400')}</td>
-            <!-- PATCH -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(repo.crud?.PATCH, 'text-violet-400')}</td>
-            <!-- DELETE -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(repo.crud?.DELETE, 'text-rose-400')}</td>
+
 
             <!-- Size -->
             <td class="px-2 py-2">
@@ -1024,7 +1029,7 @@
     }
 
 
-    function createRepo() {
+    async function createRepo() {
 
         const name = document.getElementById('createName').value.trim();
 
@@ -1038,31 +1043,32 @@
             return;
         }
 
-        const tags = document.getElementById('createTags').value
-            .split(',').map(tag => tag.trim()).filter(Boolean);
+        try {
+            const res = await window.EdmsAPI.createRepoview(name);
+            if (!res.ok) {
+                showAlert('Failed to create Repo View via API');
+                return;
+            }
 
-        const repo = {
-            id: nextId++,
-            name,
-            annotation: document.getElementById('createAnnotation').value.trim(),
-            tags,
-            dateCreated: new Date().toISOString().slice(0, 10),
-            dataSizeBytes: 0,
-            eidCount: 0,
-            dataTags: [],
-            qpCount: 0,
-            indexLists: 0,
-            crud: { GET: 0, POST: 0, PUT: 0, PATCH: 0, DELETE: 0 }
-        };
+            const tagsInput = document.getElementById('createTags').value;
+            const tags = tagsInput.split(',').map(tag => tag.trim()).filter(Boolean);
 
-        state.repos.unshift(repo);
-        sizeUnits[repo.id] = 'MB';
-        state.selected.clear();
-        state.page = 1;
+            for (const t of tags) {
+                await window.EdmsAPI.createRepoviewTag(t);
+            }
 
-        closeModal();
-        renderSidebar();
-        applyFilters();
+            await loadData();
+
+            state.selected.clear();
+            state.page = 1;
+
+            closeModal();
+            renderSidebar();
+            applyFilters();
+        } catch (error) {
+            console.error(error);
+            showAlert('Error creating repo view');
+        }
 
     }
 
