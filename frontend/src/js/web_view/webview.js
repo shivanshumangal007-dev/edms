@@ -546,7 +546,7 @@
 
         openModal(`
 
-            <h2 class="mb-4 text-sm font-semibold text-white">Tags in Data</h2>
+            <h2 class="mb-4 text-sm font-semibold text-white">EQP Tags</h2>
 
             <div class="flex flex-wrap gap-2">
                 ${
@@ -556,7 +556,7 @@
                                 ${escapeHtml(tag)}
                             </span>
                         `).join('')
-                        : '<span class="text-xs text-slate-600">No tags in data.</span>'
+                        : '<span class="text-xs text-slate-600">No EQP Tags.</span>'
                 }
             </div>
 
