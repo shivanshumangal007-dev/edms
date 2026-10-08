@@ -36,6 +36,8 @@
 
         selected: new Set(),
 
+        activeRowId: null,
+
         sidebarCollapsed: false
 
     };
@@ -61,6 +63,8 @@
         wireSidebar();
 
         wireSelection();
+
+        wireSidebarTabs();
 
         wireModal();
 
@@ -281,6 +285,10 @@
 
         syncSidebar();
 
+        syncSidebar();
+
+        renderActiveRowData();
+
     }
 
 
@@ -331,6 +339,7 @@
         const id = Number(repo.id);
 
         const isSelected = state.selected.has(id);
+        const isActive = state.activeRowId === id;
 
         row.dataset.id = String(id);
 
@@ -340,8 +349,10 @@
             'border-slate-800',
             'transition-colors',
             'duration-100',
+            'cursor-pointer',
             'hover:bg-slate-800/60',
-            isSelected ? 'bg-cyan-500/[0.045]' : ''
+            isSelected ? 'bg-cyan-500/[0.045]' : '',
+            isActive ? 'bg-slate-800/80 ring-1 ring-inset ring-cyan-500/50' : ''
         ].filter(Boolean).join(' ');
 
         const dataTagsCount = (repo.dataTags || []).length;
@@ -428,6 +439,21 @@
 
         `;
 
+
+        // --------------------------------------------------------
+        // Click row -> make active
+        // --------------------------------------------------------
+
+        row.addEventListener('click', (event) => {
+            if (event.target.closest('button, input, select, a')) return;
+            if (state.activeRowId === id) {
+                state.activeRowId = null;
+            } else {
+                state.activeRowId = id;
+            }
+            renderTable();
+            renderActiveRowData();
+        });
 
         // --------------------------------------------------------
         // Checkbox
@@ -857,6 +883,128 @@
         document.querySelectorAll('.repo-segment-checkbox').forEach(checkbox => {
             checkbox.checked = state.segments.has(checkbox.dataset.segment);
         });
+
+    }
+
+
+    let activeTab = 'repo';
+
+    function wireSidebarTabs() {
+        const tabRepo = document.getElementById('activeTabRepo');
+        const tabEqp = document.getElementById('activeTabEqp');
+        const contentRepo = document.getElementById('activeContentRepo');
+        const contentEqp = document.getElementById('activeContentEqp');
+
+        if (!tabRepo || !tabEqp) return;
+
+        function updateTabs() {
+            if (activeTab === 'repo') {
+                tabRepo.className = 'flex-1 rounded-sm px-2 py-1.5 text-[10px] font-medium bg-slate-700 text-white shadow-sm transition';
+                tabEqp.className = 'flex-1 rounded-sm px-2 py-1.5 text-[10px] font-medium text-slate-400 hover:text-slate-200 transition';
+                contentRepo.classList.remove('hidden');
+                contentEqp.classList.add('hidden');
+            } else {
+                tabEqp.className = 'flex-1 rounded-sm px-2 py-1.5 text-[10px] font-medium bg-slate-700 text-white shadow-sm transition';
+                tabRepo.className = 'flex-1 rounded-sm px-2 py-1.5 text-[10px] font-medium text-slate-400 hover:text-slate-200 transition';
+                contentEqp.classList.remove('hidden');
+                contentRepo.classList.add('hidden');
+            }
+        }
+
+        tabRepo.addEventListener('click', () => { activeTab = 'repo'; updateTabs(); });
+        tabEqp.addEventListener('click', () => { activeTab = 'eqp'; updateTabs(); });
+    }
+
+    function renderActiveRowData() {
+
+        const section = document.getElementById('sidebarActiveSection');
+        const contentRepo = document.getElementById('activeContentRepo');
+        const contentEqp = document.getElementById('activeContentEqp');
+
+        if (!section || !contentRepo || !contentEqp) return;
+
+        if (!state.activeRowId) {
+            section.classList.add('hidden');
+            return;
+        }
+
+        const repo = getRepo(state.activeRowId);
+        
+        if (!repo) {
+            section.classList.add('hidden');
+            return;
+        }
+
+        section.classList.remove('hidden');
+
+        const tagsHtml = (repo.tags || []).map(t => `<span class="rounded bg-sky-900/40 px-1.5 py-0.5 text-[10px] text-sky-300">${escapeHtml(t)}</span>`).join('');
+        const eqpTagsHtml = (repo.dataTags || []).map(t => `<span class="rounded bg-slate-800 border border-slate-700 px-1.5 py-1 text-[11px] text-slate-300">${escapeHtml(t)}</span>`).join('');
+        const segments = Array.isArray(repo.segments) ? repo.segments : [];
+        const eqpSegmentsHtml = segments.map(segment => `
+            <span class="rounded bg-slate-800 border border-slate-700 px-1.5 py-1 text-[11px] text-slate-300">
+                ${escapeHtml(segment)}
+            </span>
+        `).join('');
+
+        contentRepo.innerHTML = `
+            <div>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Folder Name</p>
+                <p class="text-xs text-slate-200 font-medium break-all">${escapeHtml(repo.name)}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Annotation</p>
+                <p class="text-[11px] text-slate-400 break-words">${escapeHtml(repo.annotation || '—')}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Tags</p>
+                <div class="flex flex-wrap gap-1">${tagsHtml || '<span class="text-xs text-slate-600">—</span>'}</div>
+            </div>
+            <div>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Date Created</p>
+                <p class="text-xs text-slate-300">${escapeHtml(repo.dateCreated || '—')}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Size</p>
+                <p class="text-xs text-slate-300">${formatSize(repo.dataSizeBytes, sizeUnits[repo.id])}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">EID Count</p>
+                <p class="text-xs text-slate-300">${repo.eidCount ?? 0}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Segments</p>
+                <p class="text-xs text-slate-300">${getRepoSegmentCount(repo)}</p>
+            </div>
+        `;
+
+        contentEqp.innerHTML = `
+            <div>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Tags</p>
+                <div class="flex flex-wrap gap-1">${eqpTagsHtml || '<span class="text-xs text-slate-600">—</span>'}</div>
+            </div>
+            <div>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Endpoint Segments</p>
+                <div class="flex flex-wrap gap-1">${eqpSegmentsHtml || '<span class="text-xs text-slate-600">—</span>'}</div>
+            </div>
+            <div>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">CRUD Methods</p>
+                <div class="flex flex-wrap gap-2">
+                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">GET</span>${crudCountBadge(repo.crud?.GET, 'text-emerald-400')}</div>
+                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">POST</span>${crudCountBadge(repo.crud?.POST, 'text-sky-400')}</div>
+                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">PUT</span>${crudCountBadge(repo.crud?.PUT, 'text-amber-400')}</div>
+                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">PATCH</span>${crudCountBadge(repo.crud?.PATCH, 'text-violet-400')}</div>
+                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">DEL</span>${crudCountBadge(repo.crud?.DELETE, 'text-rose-400')}</div>
+                </div>
+            </div>
+            <div>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">QP Count</p>
+                <p class="text-xs text-slate-300">${repo.qpCount ?? 0}</p>
+            </div>
+            <div>
+                <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Index Lists</p>
+                <p class="text-xs text-slate-300">${repo.indexLists ?? 0}</p>
+            </div>
+        `;
 
     }
 
