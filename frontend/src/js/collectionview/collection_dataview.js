@@ -834,7 +834,7 @@
       sidebarCollapsed = !sidebarCollapsed;
 
       if (sidebarCollapsed) {
-        sidebar.classList.remove("w-48");
+        sidebar.classList.remove("w-64");
         sidebar.classList.add("w-10");
         content?.classList.add("hidden");
         title?.classList.add("hidden");
@@ -843,7 +843,7 @@
         }
       } else {
         sidebar.classList.remove("w-10");
-        sidebar.classList.add("w-48");
+        sidebar.classList.add("w-64");
         content?.classList.remove("hidden");
         title?.classList.remove("hidden");
         if (icon) {
