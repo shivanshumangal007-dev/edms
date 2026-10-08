@@ -112,6 +112,23 @@
                 };
             });
 
+            if (state.repos.length === 0) {
+                state.repos.push({
+                    id: nextId++,
+                    name: 'demo repoview',
+                    annotation: 'just for referencing (dummy entry)',
+                    dateCreated: new Date().toISOString().split('T')[0],
+                    dataSizeBytes: 15 * 1024 * 1024,
+                    eidCount: 5,
+                    segments: 2,
+                    dataTags: ['eqp-demo'],
+                    tags: ['demo'],
+                    qpCount: 2,
+                    indexLists: 1,
+                    crud: { GET: 2, POST: 1, PUT: 0, PATCH: 0, DELETE: 1 }
+                });
+            }
+
             nextId += state.repos.length;
 
             state.repos.forEach(item => {
@@ -347,6 +364,16 @@
                 </button>
             </td>
 
+            <!-- Annotation -->
+            <td class="px-2 py-2">
+                <button
+                    type="button"
+                    class="repo-annotation-btn block max-w-xs truncate text-left text-[11px] text-slate-500 hover:text-cyan-400"
+                    title="${escapeAttr(repo.annotation || '')}">
+                    ${escapeHtml(repo.annotation || '—')}
+                </button>
+            </td>
+
             <!-- Tags -->
             <td class="px-2 py-2">
                 <div class="flex flex-wrap gap-1">
@@ -359,8 +386,15 @@
                 ${escapeHtml(repo.dateCreated || '—')}
             </td>
 
+            <!-- Size -->
+            <td class="px-2 py-2">
+                <button type="button" class="repo-size-btn text-slate-300 hover:text-cyan-400">
+                    ${formatSize(repo.dataSizeBytes, sizeUnits[repo.id])}
+                </button>
+            </td>
+
             <!-- GET -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(repo.crud?.GET, 'text-emerald-400')}</td>
+            <td class="px-1 py-2 text-center border-l border-slate-800">${crudCountBadge(repo.crud?.GET, 'text-emerald-400')}</td>
             <!-- POST -->
             <td class="px-1 py-2 text-center">${crudCountBadge(repo.crud?.POST, 'text-sky-400')}</td>
             <!-- PUT -->
@@ -369,13 +403,6 @@
             <td class="px-1 py-2 text-center">${crudCountBadge(repo.crud?.PATCH, 'text-violet-400')}</td>
             <!-- DELETE -->
             <td class="px-1 py-2 text-center">${crudCountBadge(repo.crud?.DELETE, 'text-rose-400')}</td>
-
-            <!-- Size -->
-            <td class="px-2 py-2">
-                <button type="button" class="repo-size-btn text-slate-300 hover:text-cyan-400">
-                    ${formatSize(repo.dataSizeBytes, sizeUnits[repo.id])}
-                </button>
-            </td>
 
             <!-- EID Count -->
             <td class="px-2 py-2 text-slate-300">${repo.eidCount ?? 0}</td>
@@ -398,15 +425,6 @@
             <!-- Index Lists -->
             <td class="px-2 py-2 text-slate-300">${repo.indexLists ?? 0}</td>
 
-            <!-- Annotation -->
-            <td class="px-2 py-2">
-                <button
-                    type="button"
-                    class="repo-annotation-btn block max-w-xs truncate text-left text-[11px] text-slate-500 hover:text-cyan-400"
-                    title="${escapeAttr(repo.annotation || '')}">
-                    ${escapeHtml(repo.annotation || '—')}
-                </button>
-            </td>
 
         `;
 

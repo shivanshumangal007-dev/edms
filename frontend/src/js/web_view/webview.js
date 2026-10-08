@@ -112,6 +112,23 @@
                 };
             });
 
+            if (state.webs.length === 0) {
+                state.webs.push({
+                    id: nextId++,
+                    name: 'demo webview',
+                    annotation: 'just for referencing (dummy entry)',
+                    dateCreated: new Date().toISOString().split('T')[0],
+                    dataSizeBytes: 15 * 1024 * 1024,
+                    eidCount: 5,
+                    segments: 2,
+                    dataTags: ['eqp-demo'],
+                    tags: ['demo'],
+                    qpCount: 2,
+                    indexLists: 1,
+                    crud: { GET: 2, POST: 1, PUT: 0, PATCH: 0, DELETE: 1 }
+                });
+            }
+
             nextId += state.webs.length;
 
             state.webs.forEach(item => {
@@ -347,6 +364,16 @@
                 </button>
             </td>
 
+            <!-- Annotation -->
+            <td class="px-2 py-2">
+                <button
+                    type="button"
+                    class="web-annotation-btn block max-w-xs truncate text-left text-[11px] text-slate-500 hover:text-cyan-400"
+                    title="${escapeAttr(web.annotation || '')}">
+                    ${escapeHtml(web.annotation || '—')}
+                </button>
+            </td>
+
             <!-- Tags -->
             <td class="px-2 py-2">
                 <div class="flex flex-wrap gap-1">
@@ -359,8 +386,15 @@
                 ${escapeHtml(web.dateCreated || '—')}
             </td>
 
+            <!-- Size -->
+            <td class="px-2 py-2">
+                <button type="button" class="web-size-btn text-slate-300 hover:text-cyan-400">
+                    ${formatSize(web.dataSizeBytes, sizeUnits[web.id])}
+                </button>
+            </td>
+
             <!-- GET -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.GET, 'text-emerald-400')}</td>
+            <td class="px-1 py-2 text-center border-l border-slate-800">${crudCountBadge(web.crud?.GET, 'text-emerald-400')}</td>
             <!-- POST -->
             <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.POST, 'text-sky-400')}</td>
             <!-- PUT -->
@@ -369,13 +403,6 @@
             <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.PATCH, 'text-violet-400')}</td>
             <!-- DELETE -->
             <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.DELETE, 'text-rose-400')}</td>
-
-            <!-- Size -->
-            <td class="px-2 py-2">
-                <button type="button" class="web-size-btn text-slate-300 hover:text-cyan-400">
-                    ${formatSize(web.dataSizeBytes, sizeUnits[web.id])}
-                </button>
-            </td>
 
             <!-- EID Count -->
             <td class="px-2 py-2 text-slate-300">${web.eidCount ?? 0}</td>
@@ -398,13 +425,17 @@
             <!-- Index Lists -->
             <td class="px-2 py-2 text-slate-300">${web.indexLists ?? 0}</td>
 
-            <!-- Annotation -->
-            <td class="px-2 py-2">
+            <!-- Action -->
+            <td class="px-2 py-2 text-center">
                 <button
                     type="button"
-                    class="web-annotation-btn block max-w-xs truncate text-left text-[11px] text-slate-500 hover:text-cyan-400"
-                    title="${escapeAttr(web.annotation || '')}">
-                    ${escapeHtml(web.annotation || '—')}
+                    class="web-action-edit-btn inline-flex items-center gap-1.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 py-1 text-[11px] font-medium text-cyan-400 transition hover:bg-cyan-500/20 hover:text-cyan-300"
+                    title="Edit Webview"
+                >
+                    <svg class="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
+                    </svg>
+                    Edit
                 </button>
             </td>
 
@@ -440,6 +471,14 @@
             openEditWebModal(id);
         });
 
+        // --------------------------------------------------------
+        // Action -> edit modal
+        // --------------------------------------------------------
+
+        row.querySelector('.web-action-edit-btn')?.addEventListener('click', event => {
+            event.stopPropagation();
+            openEditWebModal(id);
+        });
 
         // --------------------------------------------------------
         // Annotation -> annotation modal
