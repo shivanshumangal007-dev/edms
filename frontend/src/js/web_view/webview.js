@@ -1,314 +1,278 @@
 (() => {
-    'use strict';
+  "use strict";
 
-    // ============================================================
-    // CONFIG
-    // ============================================================
+  // ============================================================
+  // CONFIG
+  // ============================================================
 
-    const DATA_URL = '../data/webview.json';
+  const DATA_URL = "../data/webview.json";
 
-    const PAGE_SIZE = 10;
+  const PAGE_SIZE = 10;
 
-    const CRUD_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'];
+  const CRUD_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 
-    let nextId = 10000;
+  let nextId = 10000;
 
+  // ============================================================
+  // STATE
+  // ============================================================
 
-    // ============================================================
-    // STATE
-    // ============================================================
+  const state = {
+    webs: [],
 
-    const state = {
+    filtered: [],
 
-        webs: [],
+    page: 1,
 
-        filtered: [],
+    search: "",
 
-        page: 1,
+    crud: "all",
 
-        search: '',
+    tags: new Set(),
 
-        crud: 'all',
+    segments: new Set(),
 
-        tags: new Set(),
+    selected: new Set(),
 
-        segments: new Set(),
+    activeRowId: null,
 
-        selected: new Set(),
+    sidebarCollapsed: false,
+  };
 
-        activeRowId: null,
+  let sizeUnits = {};
 
-        sidebarCollapsed: false
+  const API_BASE = "http://localhost:3000";
 
-    };
+  // ============================================================
+  // INIT
+  // ============================================================
 
-    let sizeUnits = {};
+  document.addEventListener("DOMContentLoaded", init);
 
-    const API_BASE = 'http://localhost:3000';
+  async function init() {
+    await loadData();
 
+    wireToolbar();
 
-    // ============================================================
-    // INIT
-    // ============================================================
+    wireSidebar();
 
-    document.addEventListener('DOMContentLoaded', init);
+    wireSelection();
 
+    wireSidebarTabs();
 
-    async function init() {
+    wireModal();
 
-        await loadData();
+    renderSidebar();
 
-        wireToolbar();
+    applyFilters();
+  }
 
-        wireSidebar();
+  // ============================================================
+  // DATA
+  // ============================================================
 
-        wireSelection();
+  async function loadData() {
+    try {
+      if (!window.EdmsAPI) {
+        console.warn("EdmsAPI not loaded yet");
+        return;
+      }
 
-        wireSidebarTabs();
+      const response = await window.EdmsAPI.listWebviews();
 
-        wireModal();
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-        renderSidebar();
+      const data = response.data;
+      let list = [];
+      if (data && Array.isArray(data.items)) {
+        list = data.items;
+      } else if (Array.isArray(data)) {
+        list = data;
+      }
 
-        applyFilters();
-
-    }
-
-
-    // ============================================================
-    // DATA
-    // ============================================================
-
-    async function loadData() {
-
-        try {
-            if (!window.EdmsAPI) {
-                console.warn('EdmsAPI not loaded yet');
-                return;
-            }
-
-            const response = await window.EdmsAPI.listWebviews();
-
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-            const data = response.data;
-            let list = [];
-            if (data && Array.isArray(data.items)) {
-                list = data.items;
-            } else if (Array.isArray(data)) {
-                list = data;
-            }
-
-            // Map the backend items to the structure expected by the frontend table
-            state.webs = list.map((item, index) => {
-                return {
-                    id: nextId + index, // Generate temporary ID since backend doesn't provide one
-                    name: item.name,
-                    annotation: item.annotation || '',
-                    dateCreated: item.created_at ? item.created_at.split(' ')[0] : '',
-                    dataSizeBytes: 0,
-                    eidCount: item.endpoint_count || 0,
-                    segments: 0,
-                    dataTags: [],
-                    tags: [], // Tags aren't attached to the list view in the backend yet
-                    qpCount: 0,
-                    indexLists: 0
-                };
-            });
-
-            if (state.webs.length === 0) {
-                state.webs.push({
-                    id: nextId++,
-                    name: 'demo webview',
-                    annotation: 'just for referencing (dummy entry)',
-                    dateCreated: new Date().toISOString().split('T')[0],
-                    dataSizeBytes: 15 * 1024 * 1024,
-                    eidCount: 5,
-                    segments: 2,
-                    dataTags: ['eqp-demo'],
-                    tags: ['demo'],
-                    qpCount: 2,
-                    indexLists: 1,
-                    crud: { GET: 2, POST: 1, PUT: 0, PATCH: 0, DELETE: 1 }
-                });
-            }
-
-            nextId += state.webs.length;
-
-            state.webs.forEach(item => {
-                sizeUnits[item.id] = 'MB';
-            });
-
-        } catch (error) {
-
-            console.error('Failed to load Web View data:', error);
-
-            state.webs = [];
-
-        }
-
-    }
-
-
-    // ============================================================
-    // FILTERING
-    // ============================================================
-
-    function applyFilters() {
-
-        const term = state.search.trim().toLowerCase();
-
-        state.filtered = state.webs.filter(web => {
-
-            const webTags = Array.isArray(web.tags) ? web.tags : [];
-            const dataTags = Array.isArray(web.dataTags) ? web.dataTags : [];
-
-            const matchesSearch =
-                !term ||
-                String(web.name || '').toLowerCase().includes(term) ||
-                String(web.annotation || '').toLowerCase().includes(term) ||
-                webTags.some(tag => String(tag).toLowerCase().includes(term)) ||
-                dataTags.some(tag => String(tag).toLowerCase().includes(term));
-
-            const matchesCrud =
-                state.crud === 'all' ||
-                Number(web.crud?.[state.crud] || 0) > 0;
-
-            const matchesTags =
-                state.tags.size === 0 ||
-                [...state.tags].every(tag => webTags.includes(tag));
-
-            const webSegments = getWebSegments(web);
-
-            const matchesSegments =
-                state.segments.size === 0 ||
-                [...state.segments].every(segment => webSegments.includes(segment));
-
-            return matchesSearch && matchesCrud && matchesTags && matchesSegments;
-
+      // Map the backend items to the structure expected by the frontend table
+      state.webs = list.map((item, index) => {
+        return {
+          id: nextId + index, // Generate temporary ID since backend doesn't provide one
+          name: item.name,
+          annotation: item.annotation || "",
+          dateCreated: item.created_at ? item.created_at.split(" ")[0] : "",
+          dataSizeBytes: 0,
+          eidCount: item.endpoint_count || 0,
+          segments: 0,
+          dataTags: [],
+          tags: [], // Tags aren't attached to the list view in the backend yet
+          qpCount: 0,
+          indexLists: 0,
+        };
+      });
+
+      if (state.webs.length === 0) {
+        state.webs.push({
+          id: nextId++,
+          name: "demo webview",
+          annotation: "just for referencing (dummy entry)",
+          dateCreated: new Date().toISOString().split("T")[0],
+          dataSizeBytes: 15 * 1024 * 1024,
+          eidCount: 5,
+          segments: 2,
+          dataTags: ["eqp-demo"],
+          tags: ["demo"],
+          qpCount: 2,
+          indexLists: 1,
+          crud: { GET: 2, POST: 1, PUT: 0, PATCH: 0, DELETE: 1 },
         });
+      }
 
-        const totalPages = getTotalPages();
+      nextId += state.webs.length;
 
-        if (state.page > totalPages) state.page = totalPages;
+      state.webs.forEach((item) => {
+        sizeUnits[item.id] = "MB";
+      });
+    } catch (error) {
+      console.error("Failed to load Web View data:", error);
 
-        render();
+      state.webs = [];
+    }
+  }
 
+  // ============================================================
+  // FILTERING
+  // ============================================================
+
+  function applyFilters() {
+    const term = state.search.trim().toLowerCase();
+
+    state.filtered = state.webs.filter((web) => {
+      const webTags = Array.isArray(web.tags) ? web.tags : [];
+      const dataTags = Array.isArray(web.dataTags) ? web.dataTags : [];
+
+      const matchesSearch =
+        !term ||
+        String(web.name || "")
+          .toLowerCase()
+          .includes(term) ||
+        String(web.annotation || "")
+          .toLowerCase()
+          .includes(term) ||
+        webTags.some((tag) => String(tag).toLowerCase().includes(term)) ||
+        dataTags.some((tag) => String(tag).toLowerCase().includes(term));
+
+      const matchesCrud =
+        state.crud === "all" || Number(web.crud?.[state.crud] || 0) > 0;
+
+      const matchesTags =
+        state.tags.size === 0 ||
+        [...state.tags].every((tag) => webTags.includes(tag));
+
+      const webSegments = getWebSegments(web);
+
+      const matchesSegments =
+        state.segments.size === 0 ||
+        [...state.segments].every((segment) => webSegments.includes(segment));
+
+      return matchesSearch && matchesCrud && matchesTags && matchesSegments;
+    });
+
+    const totalPages = getTotalPages();
+
+    if (state.page > totalPages) state.page = totalPages;
+
+    render();
+  }
+
+  function getTotalPages() {
+    return Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
+  }
+
+  function currentPageItems() {
+    const start = (state.page - 1) * PAGE_SIZE;
+
+    return state.filtered.slice(start, start + PAGE_SIZE);
+  }
+
+  // ============================================================
+  // SEGMENTS
+  //
+  // Falls back gracefully depending on what a given web entry
+  // actually provides:
+  //   1) web.endpoints (full endpoint list)
+  //   2) web.segments (array of segment strings)
+  //   3) web.segmentCount (precomputed number, non-filterable)
+  //   4) [] if none of the above exist
+  // ============================================================
+
+  function getEndpointSegments(endpointPath) {
+    return String(endpointPath || "")
+      .split("/")
+      .filter(Boolean);
+  }
+
+  function getWebSegments(web) {
+    if (Array.isArray(web.endpoints)) {
+      const segments = new Set();
+
+      web.endpoints.forEach((endpoint) => {
+        getEndpointSegments(endpoint.endpoint).forEach((segment) =>
+          segments.add(segment),
+        );
+      });
+
+      return [...segments];
     }
 
-
-    function getTotalPages() {
-
-        return Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE));
-
+    if (Array.isArray(web.segments)) {
+      return web.segments;
     }
 
+    return [];
+  }
 
-    function currentPageItems() {
+  function getWebSegmentCount(web) {
+    const segments = getWebSegments(web);
 
-        const start = (state.page - 1) * PAGE_SIZE;
+    if (segments.length) return segments.length;
 
-        return state.filtered.slice(start, start + PAGE_SIZE);
+    if (typeof web.segmentCount === "number") return web.segmentCount;
 
-    }
+    return 0;
+  }
 
+  // ============================================================
+  // RENDER
+  // ============================================================
 
-    // ============================================================
-    // SEGMENTS
-    //
-    // Falls back gracefully depending on what a given web entry
-    // actually provides:
-    //   1) web.endpoints (full endpoint list)
-    //   2) web.segments (array of segment strings)
-    //   3) web.segmentCount (precomputed number, non-filterable)
-    //   4) [] if none of the above exist
-    // ============================================================
+  function render() {
+    renderTable();
 
-    function getEndpointSegments(endpointPath) {
+    renderPagination();
 
-        return String(endpointPath || '').split('/').filter(Boolean);
+    renderSelectionUI();
 
-    }
+    updateStats();
 
+    syncSidebar();
 
-    function getWebSegments(web) {
+    syncSidebar();
 
-        if (Array.isArray(web.endpoints)) {
+    renderActiveRowData();
+  }
 
-            const segments = new Set();
+  // ============================================================
+  // TABLE
+  // ============================================================
 
-            web.endpoints.forEach(endpoint => {
-                getEndpointSegments(endpoint.endpoint).forEach(segment => segments.add(segment));
-            });
+  function renderTable() {
+    const tbody = document.getElementById("webTableBody");
 
-            return [...segments];
+    if (!tbody) return;
 
-        }
+    tbody.innerHTML = "";
 
-        if (Array.isArray(web.segments)) {
+    const items = currentPageItems();
 
-            return web.segments;
-
-        }
-
-        return [];
-
-    }
-
-
-    function getWebSegmentCount(web) {
-
-        const segments = getWebSegments(web);
-
-        if (segments.length) return segments.length;
-
-        if (typeof web.segmentCount === 'number') return web.segmentCount;
-
-        return 0;
-
-    }
-
-
-    // ============================================================
-    // RENDER
-    // ============================================================
-
-    function render() {
-
-        renderTable();
-
-        renderPagination();
-
-        renderSelectionUI();
-
-        updateStats();
-
-        syncSidebar();
-
-        syncSidebar();
-
-        renderActiveRowData();
-
-    }
-
-
-    // ============================================================
-    // TABLE
-    // ============================================================
-
-    function renderTable() {
-
-        const tbody = document.getElementById('webTableBody');
-
-        if (!tbody) return;
-
-        tbody.innerHTML = '';
-
-        const items = currentPageItems();
-
-        if (items.length === 0) {
-
-            tbody.innerHTML = `
+    if (items.length === 0) {
+      tbody.innerHTML = `
                 <tr>
                     <td colspan="15" class="px-4 py-16 text-center">
                         <p class="text-sm font-medium text-slate-400">No web views found</p>
@@ -317,52 +281,50 @@
                 </tr>
             `;
 
-            updateSelectAllState();
+      updateSelectAllState();
 
-            return;
-
-        }
-
-        items.forEach(web => {
-            tbody.appendChild(createWebRow(web));
-        });
-
-        updateSelectAllState();
-
+      return;
     }
 
+    items.forEach((web) => {
+      tbody.appendChild(createWebRow(web));
+    });
 
-    function createWebRow(web) {
+    updateSelectAllState();
+  }
 
-        const row = document.createElement('tr');
+  function createWebRow(web) {
+    const row = document.createElement("tr");
 
-        const id = Number(web.id);
+    const id = Number(web.id);
 
-        const isSelected = state.selected.has(id);
-        const isActive = state.activeRowId === id;
+    const isSelected = state.selected.has(id);
+    const isActive = state.activeRowId === id;
 
-        row.dataset.id = String(id);
+    row.dataset.id = String(id);
 
-        row.className = [
-            'web-row',
-            'border-b',
-            'border-slate-800',
-            'transition-colors',
-            'duration-100',
-            'cursor-pointer',
-            'hover:bg-slate-800/60',
-            isSelected ? 'bg-cyan-500/[0.045]' : '',
-            isActive ? 'bg-slate-800/80 ring-1 ring-inset ring-cyan-500/50' : ''
-        ].filter(Boolean).join(' ');
+    row.className = [
+      "web-row",
+      "border-b",
+      "border-slate-800",
+      "transition-colors",
+      "duration-100",
+      "cursor-pointer",
+      "hover:bg-slate-800/60",
+      isSelected ? "bg-cyan-500/[0.045]" : "",
+      isActive ? "bg-slate-800/80 ring-1 ring-inset ring-cyan-500/50" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
 
-        const dataTagsCount = (web.dataTags || []).length;
-        const segmentCount = getWebSegmentCount(web);
+    const dataTagsCount = (web.dataTags || []).length;
+    const segmentCount = getWebSegmentCount(web);
 
-        row.innerHTML = `
+    row.innerHTML = `
 
             <!-- Select -->
             <td class="px-2 py-2 align-middle">
-                <input type="checkbox" class="web-select h-3.5 w-3.5 accent-cyan-400" ${isSelected ? 'checked' : ''}>
+                <input type="checkbox" class="web-select h-3.5 w-3.5 accent-cyan-400" ${isSelected ? "checked" : ""}>
             </td>
 
             <!-- Folder Name -->
@@ -380,8 +342,8 @@
                 <button
                     type="button"
                     class="web-annotation-btn block max-w-xs truncate text-left text-[11px] text-slate-500 hover:text-cyan-400"
-                    title="${escapeAttr(web.annotation || '')}">
-                    ${escapeHtml(web.annotation || '—')}
+                    title="${escapeAttr(web.annotation || "")}">
+                    ${escapeHtml(web.annotation || "—")}
                 </button>
             </td>
 
@@ -394,7 +356,7 @@
 
             <!-- Date Created -->
             <td class="px-2 py-2 text-slate-500 whitespace-nowrap">
-                ${escapeHtml(web.dateCreated || '—')}
+                ${escapeHtml(web.dateCreated || "—")}
             </td>
 
             <!-- Size -->
@@ -405,15 +367,15 @@
             </td>
 
             <!-- GET -->
-            <td class="px-1 py-2 text-center border-l border-slate-800">${crudCountBadge(web.crud?.GET, 'text-emerald-400')}</td>
+            <td class="px-1 py-2 text-center border-l border-slate-800">${crudCountBadge(web.crud?.GET, "text-emerald-400")}</td>
             <!-- POST -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.POST, 'text-sky-400')}</td>
+            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.POST, "text-sky-400")}</td>
             <!-- PUT -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.PUT, 'text-amber-400')}</td>
+            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.PUT, "text-amber-400")}</td>
             <!-- PATCH -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.PATCH, 'text-violet-400')}</td>
+            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.PATCH, "text-violet-400")}</td>
             <!-- DELETE -->
-            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.DELETE, 'text-rose-400')}</td>
+            <td class="px-1 py-2 text-center">${crudCountBadge(web.crud?.DELETE, "text-rose-400")}</td>
 
             <!-- EID Count -->
             <td class="px-2 py-2 text-slate-300">${web.eidCount ?? 0}</td>
@@ -426,7 +388,7 @@
                 <button
                     type="button"
                     class="web-datatags-btn rounded-md border border-slate-700 bg-slate-800 px-2 py-0.5 text-[11px] text-slate-300 transition hover:border-cyan-500/60 hover:text-cyan-400">
-                    ${dataTagsCount} tag${dataTagsCount === 1 ? '' : 's'}
+                    ${dataTagsCount} tag${dataTagsCount === 1 ? "" : "s"}
                 </button>
             </td>
 
@@ -452,176 +414,170 @@
 
         `;
 
+    // --------------------------------------------------------
+    // Click row -> make active
+    // --------------------------------------------------------
 
-        // --------------------------------------------------------
-        // Click row -> make active
-        // --------------------------------------------------------
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button, input, select, a")) return;
+      if (state.activeRowId === id) {
+        state.activeRowId = null;
+      } else {
+        state.activeRowId = id;
+      }
+      renderTable();
+      renderActiveRowData();
+    });
 
-        row.addEventListener('click', (event) => {
-            if (event.target.closest('button, input, select, a')) return;
-            if (state.activeRowId === id) {
-                state.activeRowId = null;
-            } else {
-                state.activeRowId = id;
-            }
-            renderTable();
-            renderActiveRowData();
-        });
+    // --------------------------------------------------------
+    // Checkbox
+    // --------------------------------------------------------
 
-        // --------------------------------------------------------
-        // Checkbox
-        // --------------------------------------------------------
+    const checkbox = row.querySelector(".web-select");
 
-        const checkbox = row.querySelector('.web-select');
+    checkbox.addEventListener("click", (event) => event.stopPropagation());
 
-        checkbox.addEventListener('click', event => event.stopPropagation());
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) state.selected.add(id);
+      else state.selected.delete(id);
 
-        checkbox.addEventListener('change', () => {
+      renderSelectionUI();
+      updateSelectAllState();
+      renderTable();
+    });
 
-            if (checkbox.checked) state.selected.add(id);
-            else state.selected.delete(id);
+    // --------------------------------------------------------
+    // Folder name -> edit modal
+    // --------------------------------------------------------
 
-            renderSelectionUI();
-            updateSelectAllState();
-            renderTable();
+    row.querySelector(".web-name-btn").addEventListener("click", (event) => {
+      event.stopPropagation();
+      openEditWebModal(id);
+    });
 
-        });
+    // --------------------------------------------------------
+    // Action -> edit modal
+    // --------------------------------------------------------
 
+    row
+      .querySelector(".web-action-edit-btn")
+      ?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        openEditWebFrontPageModal(id);
+        // openEditWebModal(id);
+      });
 
-        // --------------------------------------------------------
-        // Folder name -> edit modal
-        // --------------------------------------------------------
+    // --------------------------------------------------------
+    // Annotation -> annotation modal
+    // --------------------------------------------------------
 
-        row.querySelector('.web-name-btn').addEventListener('click', event => {
-            event.stopPropagation();
-            openEditWebModal(id);
-        });
+    row
+      .querySelector(".web-annotation-btn")
+      .addEventListener("click", (event) => {
+        event.stopPropagation();
+        openAnnotationModal(id);
+      });
 
-        // --------------------------------------------------------
-        // Action -> edit modal
-        // --------------------------------------------------------
+    // --------------------------------------------------------
+    // Size -> cycle unit
+    // --------------------------------------------------------
 
-        row.querySelector('.web-action-edit-btn')?.addEventListener('click', event => {
-            event.stopPropagation();
-            openEditWebModal(id);
-        });
+    row.querySelector(".web-size-btn").addEventListener("click", (event) => {
+      event.stopPropagation();
+      cycleSizeUnit(id);
+    });
 
-        // --------------------------------------------------------
-        // Annotation -> annotation modal
-        // --------------------------------------------------------
+    // --------------------------------------------------------
+    // Data tags -> popup list
+    // --------------------------------------------------------
 
-        row.querySelector('.web-annotation-btn').addEventListener('click', event => {
-            event.stopPropagation();
-            openAnnotationModal(id);
-        });
+    row
+      .querySelector(".web-datatags-btn")
+      .addEventListener("click", (event) => {
+        event.stopPropagation();
+        openDataTagsModal(id);
+      });
 
+    // --------------------------------------------------------
+    // Tags -> filter
+    // --------------------------------------------------------
 
-        // --------------------------------------------------------
-        // Size -> cycle unit
-        // --------------------------------------------------------
+    row.querySelectorAll(".web-tag").forEach((button) => {
+      button.addEventListener("click", (event) => {
+        event.stopPropagation();
 
-        row.querySelector('.web-size-btn').addEventListener('click', event => {
-            event.stopPropagation();
-            cycleSizeUnit(id);
-        });
+        const tag = button.dataset.tag;
 
+        state.tags.clear();
+        state.tags.add(tag);
+        state.page = 1;
 
-        // --------------------------------------------------------
-        // Data tags -> popup list
-        // --------------------------------------------------------
+        applyFilters();
+      });
+    });
 
-        row.querySelector('.web-datatags-btn').addEventListener('click', event => {
-            event.stopPropagation();
-            openDataTagsModal(id);
-        });
+    return row;
+  }
 
+  function renderWebTags(web) {
+    const tags = Array.isArray(web.tags) ? web.tags : [];
 
-        // --------------------------------------------------------
-        // Tags -> filter
-        // --------------------------------------------------------
-
-        row.querySelectorAll('.web-tag').forEach(button => {
-
-            button.addEventListener('click', event => {
-
-                event.stopPropagation();
-
-                const tag = button.dataset.tag;
-
-                state.tags.clear();
-                state.tags.add(tag);
-                state.page = 1;
-
-                applyFilters();
-
-            });
-
-        });
-
-
-        return row;
-
+    if (!tags.length) {
+      return `<span class="text-[10px] text-slate-600">—</span>`;
     }
 
-
-    function renderWebTags(web) {
-
-        const tags = Array.isArray(web.tags) ? web.tags : [];
-
-        if (!tags.length) {
-            return `<span class="text-[10px] text-slate-600">—</span>`;
-        }
-
-        return tags.map(tag => `
+    return tags
+      .map(
+        (tag) => `
             <button
                 type="button"
                 class="web-tag inline-flex rounded bg-sky-900/40 px-1.5 py-0.5 text-[10px] text-sky-300 transition hover:bg-sky-500/20 hover:text-sky-200"
                 data-tag="${escapeAttr(tag)}">
                 ${escapeHtml(tag)}
             </button>
-        `).join('');
+        `,
+      )
+      .join("");
+  }
 
-    }
+  function crudCountBadge(count, color) {
+    const value = Number(count || 0);
 
-
-    function crudCountBadge(count, color) {
-
-        const value = Number(count || 0);
-
-        return `
-            <span class="inline-flex min-w-6 items-center justify-center rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] ${value > 0 ? color : 'text-slate-600'}">
+    return `
+            <span class="inline-flex min-w-6 items-center justify-center rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] ${value > 0 ? color : "text-slate-600"}">
                 ${value}
             </span>
         `;
+  }
 
-    }
+  // ============================================================
+  // DATA TAGS POPUP
+  // ============================================================
 
+  function openDataTagsModal(id) {
+    const web = getWeb(id);
 
-    // ============================================================
-    // DATA TAGS POPUP
-    // ============================================================
+    if (!web) return;
 
-    function openDataTagsModal(id) {
+    const tags = web.dataTags || [];
 
-        const web = getWeb(id);
-
-        if (!web) return;
-
-        const tags = web.dataTags || [];
-
-        openModal(`
+    openModal(`
 
             <h2 class="mb-4 text-sm font-semibold text-white">EQP Tags</h2>
 
             <div class="flex flex-wrap gap-2">
                 ${
-                    tags.length
-                        ? tags.map(tag => `
+                  tags.length
+                    ? tags
+                        .map(
+                          (tag) => `
                             <span class="rounded-md border border-slate-700 bg-slate-800 px-2.5 py-1 text-xs text-slate-300">
                                 ${escapeHtml(tag)}
                             </span>
-                        `).join('')
-                        : '<span class="text-xs text-slate-600">No EQP Tags.</span>'
+                        `,
+                        )
+                        .join("")
+                    : '<span class="text-xs text-slate-600">No EQP Tags.</span>'
                 }
             </div>
 
@@ -632,349 +588,333 @@
             </div>
 
         `);
+  }
 
+  // ============================================================
+  // PAGINATION
+  // ============================================================
+
+  function renderPagination() {
+    const total = state.filtered.length;
+
+    const start = total ? (state.page - 1) * PAGE_SIZE + 1 : 0;
+
+    const end = Math.min(state.page * PAGE_SIZE, total);
+
+    document.getElementById("webRangeStart").textContent = start;
+    document.getElementById("webRangeEnd").textContent = end;
+    document.getElementById("webTotal").textContent = total;
+
+    const totalPages = getTotalPages();
+
+    const numbers = document.getElementById("webPagination");
+
+    numbers.innerHTML = "";
+
+    getPageRange(state.page, totalPages).forEach((page) => {
+      if (page === "...") {
+        const span = document.createElement("span");
+        span.className = "px-1 text-slate-600";
+        span.textContent = "…";
+        numbers.appendChild(span);
+        return;
+      }
+
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = page;
+
+      button.className =
+        page === state.page
+          ? "min-w-7 rounded-md bg-cyan-500 px-2 py-1 text-[11px] text-white"
+          : "min-w-7 rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-400 transition hover:bg-slate-800 hover:text-white";
+
+      button.addEventListener("click", () => {
+        state.page = page;
+        render();
+      });
+
+      numbers.appendChild(button);
+    });
+
+    document.getElementById("webPrev").disabled = state.page <= 1;
+    document.getElementById("webNext").disabled = state.page >= totalPages;
+  }
+
+  function getPageRange(current, total) {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+
+    const pages = [1];
+
+    if (current > 4) pages.push("...");
+
+    const start = Math.max(2, current - 1);
+    const end = Math.min(total - 1, current + 1);
+
+    for (let page = start; page <= end; page++) pages.push(page);
+
+    if (current < total - 3) pages.push("...");
+
+    pages.push(total);
+
+    return pages;
+  }
+
+  // ============================================================
+  // SIDEBAR
+  // ============================================================
+
+  function wireSidebar() {
+    document
+      .getElementById("sidebarToggle")
+      ?.addEventListener("click", toggleSidebar);
+  }
+
+  function toggleSidebar() {
+    const sidebar = document.getElementById("filterSidebar");
+    const content = document.getElementById("sidebarContent");
+    const title = document.getElementById("sidebarTitle");
+    const icon = document.getElementById("sidebarToggleIcon");
+
+    state.sidebarCollapsed = !state.sidebarCollapsed;
+
+    if (state.sidebarCollapsed) {
+      sidebar.classList.remove("w-64");
+      sidebar.classList.add("w-10");
+      content.classList.add("hidden");
+      title.classList.add("hidden");
+      icon.innerHTML = `<path d="m9 18 6-6-6-6"/>`;
+    } else {
+      sidebar.classList.remove("w-10");
+      sidebar.classList.add("w-64");
+      content.classList.remove("hidden");
+      title.classList.remove("hidden");
+      icon.innerHTML = `<path d="m15 18-6-6 6-6"/>`;
     }
+  }
 
+  function renderSidebar() {
+    renderTags();
+    renderSegments();
+    updateStats();
+  }
 
-    // ============================================================
-    // PAGINATION
-    // ============================================================
+  function renderTags() {
+    const container = document.getElementById("tagsContainer");
 
-    function renderPagination() {
+    if (!container) return;
 
-        const total = state.filtered.length;
+    const counts = {};
 
-        const start = total ? ((state.page - 1) * PAGE_SIZE) + 1 : 0;
+    state.webs.forEach((web) => {
+      (web.tags || []).forEach((tag) => {
+        if (!tag) return;
+        counts[tag] = (counts[tag] || 0) + 1;
+      });
+    });
 
-        const end = Math.min(state.page * PAGE_SIZE, total);
+    container.innerHTML = "";
 
-        document.getElementById('webRangeStart').textContent = start;
-        document.getElementById('webRangeEnd').textContent = end;
-        document.getElementById('webTotal').textContent = total;
+    Object.entries(counts)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .forEach(([tag, count]) => {
+        const wrapper = document.createElement("label");
+        wrapper.className = "group flex cursor-pointer items-center gap-2";
 
-        const totalPages = getTotalPages();
-
-        const numbers = document.getElementById('webPagination');
-
-        numbers.innerHTML = '';
-
-        getPageRange(state.page, totalPages).forEach(page => {
-
-            if (page === '...') {
-
-                const span = document.createElement('span');
-                span.className = 'px-1 text-slate-600';
-                span.textContent = '…';
-                numbers.appendChild(span);
-                return;
-
-            }
-
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.textContent = page;
-
-            button.className = page === state.page
-                ? 'min-w-7 rounded-md bg-cyan-500 px-2 py-1 text-[11px] text-white'
-                : 'min-w-7 rounded-md border border-slate-700 px-2 py-1 text-[11px] text-slate-400 transition hover:bg-slate-800 hover:text-white';
-
-            button.addEventListener('click', () => {
-                state.page = page;
-                render();
-            });
-
-            numbers.appendChild(button);
-
-        });
-
-        document.getElementById('webPrev').disabled = state.page <= 1;
-        document.getElementById('webNext').disabled = state.page >= totalPages;
-
-    }
-
-
-    function getPageRange(current, total) {
-
-        if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
-
-        const pages = [1];
-
-        if (current > 4) pages.push('...');
-
-        const start = Math.max(2, current - 1);
-        const end = Math.min(total - 1, current + 1);
-
-        for (let page = start; page <= end; page++) pages.push(page);
-
-        if (current < total - 3) pages.push('...');
-
-        pages.push(total);
-
-        return pages;
-
-    }
-
-
-    // ============================================================
-    // SIDEBAR
-    // ============================================================
-
-    function wireSidebar() {
-
-        document.getElementById('sidebarToggle')?.addEventListener('click', toggleSidebar);
-
-    }
-
-
-    function toggleSidebar() {
-
-        const sidebar = document.getElementById('filterSidebar');
-        const content = document.getElementById('sidebarContent');
-        const title = document.getElementById('sidebarTitle');
-        const icon = document.getElementById('sidebarToggleIcon');
-
-        state.sidebarCollapsed = !state.sidebarCollapsed;
-
-        if (state.sidebarCollapsed) {
-
-            sidebar.classList.remove('w-64');
-            sidebar.classList.add('w-10');
-            content.classList.add('hidden');
-            title.classList.add('hidden');
-            icon.innerHTML = `<path d="m9 18 6-6-6-6"/>`;
-
-        } else {
-
-            sidebar.classList.remove('w-10');
-            sidebar.classList.add('w-64');
-            content.classList.remove('hidden');
-            title.classList.remove('hidden');
-            icon.innerHTML = `<path d="m15 18-6-6 6-6"/>`;
-
-        }
-
-    }
-
-
-    function renderSidebar() {
-
-        renderTags();
-        renderSegments();
-        updateStats();
-
-    }
-
-
-    function renderTags() {
-
-        const container = document.getElementById('tagsContainer');
-
-        if (!container) return;
-
-        const counts = {};
-
-        state.webs.forEach(web => {
-            (web.tags || []).forEach(tag => {
-                if (!tag) return;
-                counts[tag] = (counts[tag] || 0) + 1;
-            });
-        });
-
-        container.innerHTML = '';
-
-        Object.entries(counts)
-            .sort((a, b) => a[0].localeCompare(b[0]))
-            .forEach(([tag, count]) => {
-
-                const wrapper = document.createElement('label');
-                wrapper.className = 'group flex cursor-pointer items-center gap-2';
-
-                wrapper.innerHTML = `
+        wrapper.innerHTML = `
                     <input type="checkbox" class="web-tag-checkbox h-3.5 w-3.5 accent-cyan-400" data-tag="${escapeAttr(tag)}">
                     <button type="button" class="web-tag-filter min-w-0 flex-1 truncate rounded px-1.5 py-1 text-left text-[11px] text-slate-400 transition hover:bg-sky-500/10 hover:text-sky-300" data-tag="${escapeAttr(tag)}">
                         ${escapeHtml(tag)} <span class="text-slate-600">(${count})</span>
                     </button>
                 `;
 
-                const checkbox = wrapper.querySelector('.web-tag-checkbox');
-                const button = wrapper.querySelector('.web-tag-filter');
+        const checkbox = wrapper.querySelector(".web-tag-checkbox");
+        const button = wrapper.querySelector(".web-tag-filter");
 
-                checkbox.addEventListener('change', () => setTagFilter(tag, checkbox.checked));
+        checkbox.addEventListener("change", () =>
+          setTagFilter(tag, checkbox.checked),
+        );
 
-                button.addEventListener('click', event => {
-                    event.preventDefault();
-                    const enabled = !state.tags.has(tag);
-                    checkbox.checked = enabled;
-                    setTagFilter(tag, enabled);
-                });
-
-                container.appendChild(wrapper);
-
-            });
-
-    }
-
-
-    function renderSegments() {
-
-        const container = document.getElementById('segmentsContainer');
-
-        if (!container) return;
-
-        const counts = {};
-
-        state.webs.forEach(web => {
-            getWebSegments(web).forEach(segment => {
-                counts[segment] = (counts[segment] || 0) + 1;
-            });
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          const enabled = !state.tags.has(tag);
+          checkbox.checked = enabled;
+          setTagFilter(tag, enabled);
         });
 
-        container.innerHTML = '';
+        container.appendChild(wrapper);
+      });
+  }
 
-        if (Object.keys(counts).length === 0) {
+  function renderSegments() {
+    const container = document.getElementById("segmentsContainer");
 
-            container.innerHTML = `<span class="text-[11px] text-slate-600">No segment data available.</span>`;
-            return;
+    if (!container) return;
 
-        }
+    const counts = {};
 
-        Object.entries(counts)
-            .sort((a, b) => a[0].localeCompare(b[0]))
-            .forEach(([segment, count]) => {
+    state.webs.forEach((web) => {
+      getWebSegments(web).forEach((segment) => {
+        counts[segment] = (counts[segment] || 0) + 1;
+      });
+    });
 
-                const wrapper = document.createElement('label');
-                wrapper.className = 'group flex cursor-pointer items-center gap-2';
+    container.innerHTML = "";
 
-                wrapper.innerHTML = `
+    if (Object.keys(counts).length === 0) {
+      container.innerHTML = `<span class="text-[11px] text-slate-600">No segment data available.</span>`;
+      return;
+    }
+
+    Object.entries(counts)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .forEach(([segment, count]) => {
+        const wrapper = document.createElement("label");
+        wrapper.className = "group flex cursor-pointer items-center gap-2";
+
+        wrapper.innerHTML = `
                     <input type="checkbox" class="web-segment-checkbox h-3.5 w-3.5 accent-cyan-400" data-segment="${escapeAttr(segment)}">
                     <button type="button" class="web-segment-filter min-w-0 flex-1 truncate rounded px-1.5 py-1 text-left text-[11px] text-slate-400 transition hover:bg-cyan-500/10 hover:text-cyan-300" data-segment="${escapeAttr(segment)}">
                         ${escapeHtml(segment)} <span class="text-slate-600">(${count})</span>
                     </button>
                 `;
 
-                const checkbox = wrapper.querySelector('.web-segment-checkbox');
-                const button = wrapper.querySelector('.web-segment-filter');
+        const checkbox = wrapper.querySelector(".web-segment-checkbox");
+        const button = wrapper.querySelector(".web-segment-filter");
 
-                checkbox.addEventListener('change', () => setSegmentFilter(segment, checkbox.checked));
+        checkbox.addEventListener("change", () =>
+          setSegmentFilter(segment, checkbox.checked),
+        );
 
-                button.addEventListener('click', event => {
-                    event.preventDefault();
-                    const enabled = !state.segments.has(segment);
-                    checkbox.checked = enabled;
-                    setSegmentFilter(segment, enabled);
-                });
-
-                container.appendChild(wrapper);
-
-            });
-
-    }
-
-
-    function setTagFilter(tag, enabled) {
-
-        if (enabled) state.tags.add(tag);
-        else state.tags.delete(tag);
-
-        state.page = 1;
-
-        applyFilters();
-
-    }
-
-
-    function setSegmentFilter(segment, enabled) {
-
-        if (enabled) state.segments.add(segment);
-        else state.segments.delete(segment);
-
-        state.page = 1;
-
-        applyFilters();
-
-    }
-
-
-    function syncSidebar() {
-
-        document.querySelectorAll('.web-tag-checkbox').forEach(checkbox => {
-            checkbox.checked = state.tags.has(checkbox.dataset.tag);
+        button.addEventListener("click", (event) => {
+          event.preventDefault();
+          const enabled = !state.segments.has(segment);
+          checkbox.checked = enabled;
+          setSegmentFilter(segment, enabled);
         });
 
-        document.querySelectorAll('.web-segment-checkbox').forEach(checkbox => {
-            checkbox.checked = state.segments.has(checkbox.dataset.segment);
-        });
+        container.appendChild(wrapper);
+      });
+  }
 
+  function setTagFilter(tag, enabled) {
+    if (enabled) state.tags.add(tag);
+    else state.tags.delete(tag);
+
+    state.page = 1;
+
+    applyFilters();
+  }
+
+  function setSegmentFilter(segment, enabled) {
+    if (enabled) state.segments.add(segment);
+    else state.segments.delete(segment);
+
+    state.page = 1;
+
+    applyFilters();
+  }
+
+  function syncSidebar() {
+    document.querySelectorAll(".web-tag-checkbox").forEach((checkbox) => {
+      checkbox.checked = state.tags.has(checkbox.dataset.tag);
+    });
+
+    document.querySelectorAll(".web-segment-checkbox").forEach((checkbox) => {
+      checkbox.checked = state.segments.has(checkbox.dataset.segment);
+    });
+  }
+
+  let activeTab = "web";
+
+  function wireSidebarTabs() {
+    const tabRepo = document.getElementById("activeTabRepo");
+    const tabEqp = document.getElementById("activeTabEqp");
+    const contentRepo = document.getElementById("activeContentRepo");
+    const contentEqp = document.getElementById("activeContentEqp");
+
+    if (!tabRepo || !tabEqp) return;
+
+    function updateTabs() {
+      if (activeTab === "web") {
+        tabRepo.className =
+          "flex-1 rounded-sm px-2 py-1.5 text-[10px] font-medium bg-slate-700 text-white shadow-sm transition";
+        tabEqp.className =
+          "flex-1 rounded-sm px-2 py-1.5 text-[10px] font-medium text-slate-400 hover:text-slate-200 transition";
+        contentRepo.classList.remove("hidden");
+        contentEqp.classList.add("hidden");
+      } else {
+        tabEqp.className =
+          "flex-1 rounded-sm px-2 py-1.5 text-[10px] font-medium bg-slate-700 text-white shadow-sm transition";
+        tabRepo.className =
+          "flex-1 rounded-sm px-2 py-1.5 text-[10px] font-medium text-slate-400 hover:text-slate-200 transition";
+        contentEqp.classList.remove("hidden");
+        contentRepo.classList.add("hidden");
+      }
     }
 
+    tabRepo.addEventListener("click", () => {
+      activeTab = "web";
+      updateTabs();
+    });
+    tabEqp.addEventListener("click", () => {
+      activeTab = "eqp";
+      updateTabs();
+    });
+  }
 
-    let activeTab = 'web';
+  function renderActiveRowData() {
+    const section = document.getElementById("sidebarActiveSection");
+    const contentRepo = document.getElementById("activeContentRepo");
+    const contentEqp = document.getElementById("activeContentEqp");
 
-    function wireSidebarTabs() {
-        const tabRepo = document.getElementById('activeTabRepo');
-        const tabEqp = document.getElementById('activeTabEqp');
-        const contentRepo = document.getElementById('activeContentRepo');
-        const contentEqp = document.getElementById('activeContentEqp');
+    if (!section || !contentRepo || !contentEqp) return;
 
-        if (!tabRepo || !tabEqp) return;
-
-        function updateTabs() {
-            if (activeTab === 'web') {
-                tabRepo.className = 'flex-1 rounded-sm px-2 py-1.5 text-[10px] font-medium bg-slate-700 text-white shadow-sm transition';
-                tabEqp.className = 'flex-1 rounded-sm px-2 py-1.5 text-[10px] font-medium text-slate-400 hover:text-slate-200 transition';
-                contentRepo.classList.remove('hidden');
-                contentEqp.classList.add('hidden');
-            } else {
-                tabEqp.className = 'flex-1 rounded-sm px-2 py-1.5 text-[10px] font-medium bg-slate-700 text-white shadow-sm transition';
-                tabRepo.className = 'flex-1 rounded-sm px-2 py-1.5 text-[10px] font-medium text-slate-400 hover:text-slate-200 transition';
-                contentEqp.classList.remove('hidden');
-                contentRepo.classList.add('hidden');
-            }
-        }
-
-        tabRepo.addEventListener('click', () => { activeTab = 'web'; updateTabs(); });
-        tabEqp.addEventListener('click', () => { activeTab = 'eqp'; updateTabs(); });
+    if (!state.activeRowId) {
+      section.classList.add("hidden");
+      return;
     }
 
-    function renderActiveRowData() {
+    const web = getWeb(state.activeRowId);
 
-        const section = document.getElementById('sidebarActiveSection');
-        const contentRepo = document.getElementById('activeContentRepo');
-        const contentEqp = document.getElementById('activeContentEqp');
+    if (!web) {
+      section.classList.add("hidden");
+      return;
+    }
 
-        if (!section || !contentRepo || !contentEqp) return;
+    section.classList.remove("hidden");
 
-        if (!state.activeRowId) {
-            section.classList.add('hidden');
-            return;
-        }
-
-        const web = getWeb(state.activeRowId);
-        
-        if (!web) {
-            section.classList.add('hidden');
-            return;
-        }
-
-        section.classList.remove('hidden');
-
-        const tagsHtml = (web.tags || []).map(t => `<span class="rounded bg-sky-900/40 px-1.5 py-0.5 text-[10px] text-sky-300">${escapeHtml(t)}</span>`).join('');
-        const eqpTagsHtml = (web.dataTags || []).map(t => `<span class="rounded bg-slate-800 border border-slate-700 px-1.5 py-1 text-[11px] text-slate-300">${escapeHtml(t)}</span>`).join('');
-        const segments = Array.isArray(web.segments) ? web.segments : [];
-        const eqpSegmentsHtml = segments.map(segment => `
+    const tagsHtml = (web.tags || [])
+      .map(
+        (t) =>
+          `<span class="rounded bg-sky-900/40 px-1.5 py-0.5 text-[10px] text-sky-300">${escapeHtml(t)}</span>`,
+      )
+      .join("");
+    const eqpTagsHtml = (web.dataTags || [])
+      .map(
+        (t) =>
+          `<span class="rounded bg-slate-800 border border-slate-700 px-1.5 py-1 text-[11px] text-slate-300">${escapeHtml(t)}</span>`,
+      )
+      .join("");
+    const segments = Array.isArray(web.segments) ? web.segments : [];
+    const eqpSegmentsHtml = segments
+      .map(
+        (segment) => `
             <span class="rounded bg-slate-800 border border-slate-700 px-1.5 py-1 text-[11px] text-slate-300">
                 ${escapeHtml(segment)}
             </span>
-        `).join('');
+        `,
+      )
+      .join("");
 
-        contentRepo.innerHTML = `
+    contentRepo.innerHTML = `
             <div>
                 <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Folder Name</p>
                 <p class="text-xs text-slate-200 font-medium break-all">${escapeHtml(web.name)}</p>
             </div>
             <div>
                 <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Annotation</p>
-                <p class="text-[11px] text-slate-400 break-words">${escapeHtml(web.annotation || '—')}</p>
+                <p class="text-[11px] text-slate-400 break-words">${escapeHtml(web.annotation || "—")}</p>
             </div>
             <div>
                 <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Tags</p>
@@ -982,7 +922,7 @@
             </div>
             <div>
                 <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Date Created</p>
-                <p class="text-xs text-slate-300">${escapeHtml(web.dateCreated || '—')}</p>
+                <p class="text-xs text-slate-300">${escapeHtml(web.dateCreated || "—")}</p>
             </div>
             <div>
                 <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Size</p>
@@ -998,7 +938,7 @@
             </div>
         `;
 
-        contentEqp.innerHTML = `
+    contentEqp.innerHTML = `
             <div>
                 <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">Tags</p>
                 <div class="flex flex-wrap gap-1">${eqpTagsHtml || '<span class="text-xs text-slate-600">—</span>'}</div>
@@ -1010,11 +950,11 @@
             <div>
                 <p class="text-[10px] text-slate-500 uppercase tracking-wider mb-1">CRUD Methods</p>
                 <div class="flex flex-wrap gap-2">
-                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">GET</span>${crudCountBadge(web.crud?.GET, 'text-emerald-400')}</div>
-                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">POST</span>${crudCountBadge(web.crud?.POST, 'text-sky-400')}</div>
-                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">PUT</span>${crudCountBadge(web.crud?.PUT, 'text-amber-400')}</div>
-                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">PATCH</span>${crudCountBadge(web.crud?.PATCH, 'text-violet-400')}</div>
-                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">DEL</span>${crudCountBadge(web.crud?.DELETE, 'text-rose-400')}</div>
+                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">GET</span>${crudCountBadge(web.crud?.GET, "text-emerald-400")}</div>
+                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">POST</span>${crudCountBadge(web.crud?.POST, "text-sky-400")}</div>
+                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">PUT</span>${crudCountBadge(web.crud?.PUT, "text-amber-400")}</div>
+                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">PATCH</span>${crudCountBadge(web.crud?.PATCH, "text-violet-400")}</div>
+                    <div class="flex flex-col items-center"><span class="text-[10px] text-slate-400">DEL</span>${crudCountBadge(web.crud?.DELETE, "text-rose-400")}</div>
                 </div>
             </div>
             <div>
@@ -1026,192 +966,173 @@
                 <p class="text-xs text-slate-300">${web.indexLists ?? 0}</p>
             </div>
         `;
+  }
 
-    }
+  // ============================================================
+  // STATS
+  // ============================================================
 
+  function updateStats() {
+    const webStat = document.getElementById("webStat");
+    const tagStat = document.getElementById("tagStat");
+    const segmentStat = document.getElementById("segmentStat");
 
-    // ============================================================
-    // STATS
-    // ============================================================
+    const tags = new Set();
+    const segments = new Set();
 
-    function updateStats() {
+    state.webs.forEach((web) => {
+      (web.tags || []).forEach((tag) => tags.add(tag));
 
-        const webStat = document.getElementById('webStat');
-        const tagStat = document.getElementById('tagStat');
-        const segmentStat = document.getElementById('segmentStat');
+      getWebSegments(web).forEach((segment) => segments.add(segment));
+    });
 
-        const tags = new Set();
-        const segments = new Set();
+    if (webStat) webStat.textContent = state.webs.length;
+    if (tagStat) tagStat.textContent = tags.size;
+    if (segmentStat) segmentStat.textContent = segments.size;
+  }
 
-        state.webs.forEach(web => {
+  // ============================================================
+  // SELECTION
+  // ============================================================
 
-            (web.tags || []).forEach(tag => tags.add(tag));
+  function wireSelection() {
+    document
+      .getElementById("clearWebSelection")
+      ?.addEventListener("click", clearSelection);
 
-            getWebSegments(web).forEach(segment => segments.add(segment));
-
+    document
+      .getElementById("selectAllWebs")
+      ?.addEventListener("change", (event) => {
+        currentPageItems().forEach((web) => {
+          if (event.target.checked) state.selected.add(Number(web.id));
+          else state.selected.delete(Number(web.id));
         });
-
-        if (webStat) webStat.textContent = state.webs.length;
-        if (tagStat) tagStat.textContent = tags.size;
-        if (segmentStat) segmentStat.textContent = segments.size;
-
-    }
-
-
-    // ============================================================
-    // SELECTION
-    // ============================================================
-
-    function wireSelection() {
-
-        document.getElementById('clearWebSelection')?.addEventListener('click', clearSelection);
-
-        document.getElementById('selectAllWebs')?.addEventListener('change', event => {
-
-            currentPageItems().forEach(web => {
-
-                if (event.target.checked) state.selected.add(Number(web.id));
-                else state.selected.delete(Number(web.id));
-
-            });
-
-            render();
-
-        });
-
-    }
-
-
-    function clearSelection() {
-
-        state.selected.clear();
 
         render();
+      });
+  }
 
+  function clearSelection() {
+    state.selected.clear();
+
+    render();
+  }
+
+  function renderSelectionUI() {
+    const bar = document.getElementById("selectionBar");
+    const count = document.getElementById("selectedWebCount");
+    const list = document.getElementById("selectedWebList");
+
+    const selected = getSelectedWebs();
+
+    if (selected.length) {
+      bar?.classList.remove("hidden");
+      bar?.classList.add("flex");
+    } else {
+      bar?.classList.add("hidden");
+      bar?.classList.remove("flex");
     }
 
+    if (count) count.textContent = `${selected.length} selected`;
 
-    function renderSelectionUI() {
-
-        const bar = document.getElementById('selectionBar');
-        const count = document.getElementById('selectedWebCount');
-        const list = document.getElementById('selectedWebList');
-
-        const selected = getSelectedWebs();
-
-        if (selected.length) {
-            bar?.classList.remove('hidden');
-            bar?.classList.add('flex');
-        } else {
-            bar?.classList.add('hidden');
-            bar?.classList.remove('flex');
-        }
-
-        if (count) count.textContent = `${selected.length} selected`;
-
-        if (list) {
-
-            list.innerHTML = selected.map(web => `
+    if (list) {
+      list.innerHTML = selected
+        .map(
+          (web) => `
                 <span class="shrink-0 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 font-mono text-[10px] text-cyan-300">
                     ${escapeHtml(web.name)}
                 </span>
-            `).join('');
-
-        }
-
+            `,
+        )
+        .join("");
     }
+  }
 
+  function updateSelectAllState() {
+    const selectAll = document.getElementById("selectAllWebs");
 
-    function updateSelectAllState() {
+    if (!selectAll) return;
 
-        const selectAll = document.getElementById('selectAllWebs');
+    const items = currentPageItems();
 
-        if (!selectAll) return;
+    const selectedCount = items.filter((web) =>
+      state.selected.has(Number(web.id)),
+    ).length;
 
-        const items = currentPageItems();
+    selectAll.checked = items.length > 0 && selectedCount === items.length;
 
-        const selectedCount = items.filter(web => state.selected.has(Number(web.id))).length;
+    selectAll.indeterminate = selectedCount > 0 && selectedCount < items.length;
+  }
 
-        selectAll.checked = items.length > 0 && selectedCount === items.length;
+  function getSelectedWebs() {
+    return state.webs.filter((web) => state.selected.has(Number(web.id)));
+  }
 
-        selectAll.indeterminate = selectedCount > 0 && selectedCount < items.length;
+  // ============================================================
+  // TOOLBAR
+  // ============================================================
 
-    }
+  function wireToolbar() {
+    document.getElementById("webSearch")?.addEventListener("input", (event) => {
+      state.search = event.target.value;
+      state.page = 1;
+      applyFilters();
+    });
 
-
-    function getSelectedWebs() {
-
-        return state.webs.filter(web => state.selected.has(Number(web.id)));
-
-    }
-
-
-    // ============================================================
-    // TOOLBAR
-    // ============================================================
-
-    function wireToolbar() {
-
-        document.getElementById('webSearch')?.addEventListener('input', event => {
-            state.search = event.target.value;
-            state.page = 1;
-            applyFilters();
-        });
-
-        document.getElementById('crudFilter')?.addEventListener('change', event => {
-            state.crud = event.target.value;
-            state.page = 1;
-            applyFilters();
-        });
-
-        document.getElementById('resetFilters')?.addEventListener('click', resetFilters);
-
-        document.getElementById('createWebBtn')?.addEventListener('click', openCreateModal);
-
-        document.getElementById('webPrev')?.addEventListener('click', () => {
-            if (state.page > 1) {
-                state.page--;
-                render();
-            }
-        });
-
-        document.getElementById('webNext')?.addEventListener('click', () => {
-            const totalPages = getTotalPages();
-            if (state.page < totalPages) {
-                state.page++;
-                render();
-            }
-        });
-
-    }
-
-
-    function resetFilters() {
-
-        state.search = '';
-        state.crud = 'all';
-        state.tags.clear();
-        state.segments.clear();
+    document
+      .getElementById("crudFilter")
+      ?.addEventListener("change", (event) => {
+        state.crud = event.target.value;
         state.page = 1;
-
-        const search = document.getElementById('webSearch');
-        if (search) search.value = '';
-
-        const crud = document.getElementById('crudFilter');
-        if (crud) crud.value = 'all';
-
         applyFilters();
+      });
 
-    }
+    document
+      .getElementById("resetFilters")
+      ?.addEventListener("click", resetFilters);
 
+    document
+      .getElementById("createWebBtn")
+      ?.addEventListener("click", openCreateModal);
 
-    // ============================================================
-    // CREATE
-    // ============================================================
+    document.getElementById("webPrev")?.addEventListener("click", () => {
+      if (state.page > 1) {
+        state.page--;
+        render();
+      }
+    });
 
-    function openCreateModal() {
+    document.getElementById("webNext")?.addEventListener("click", () => {
+      const totalPages = getTotalPages();
+      if (state.page < totalPages) {
+        state.page++;
+        render();
+      }
+    });
+  }
 
-        openModal(`
+  function resetFilters() {
+    state.search = "";
+    state.crud = "all";
+    state.tags.clear();
+    state.segments.clear();
+    state.page = 1;
+
+    const search = document.getElementById("webSearch");
+    if (search) search.value = "";
+
+    const crud = document.getElementById("crudFilter");
+    if (crud) crud.value = "all";
+
+    applyFilters();
+  }
+
+  // ============================================================
+  // CREATE
+  // ============================================================
+
+  function openCreateModal() {
+    openModal(`
 
             <h2 class="mb-4 text-sm font-semibold text-white">Create Web View</h2>
 
@@ -1231,116 +1152,122 @@
 
         `);
 
-        document.getElementById('confirmCreate')?.addEventListener('click', createWeb);
+    document
+      .getElementById("confirmCreate")
+      ?.addEventListener("click", createWeb);
+  }
 
+  async function createWeb() {
+    const name = document.getElementById("createName").value.trim();
+
+    if (!name) {
+      showAlert("Folder name is required.");
+      return;
     }
 
-
-    async function createWeb() {
-
-        const name = document.getElementById('createName').value.trim();
-
-        if (!name) {
-            showAlert('Folder name is required.');
-            return;
-        }
-
-        if (state.webs.some(web => web.name.toLowerCase() === name.toLowerCase())) {
-            showAlert('A Web View with this name already exists.');
-            return;
-        }
-
-        try {
-            const res = await window.EdmsAPI.createWebview(name);
-            if (!res.ok) {
-                showAlert('Failed to create Web View via API');
-                return;
-            }
-
-            const tagsInput = document.getElementById('createTags').value;
-            const tags = tagsInput.split(',').map(tag => tag.trim()).filter(Boolean);
-
-            for (const t of tags) {
-                await window.EdmsAPI.createWebviewTag(t);
-            }
-
-            await loadData();
-
-            state.selected.clear();
-            state.page = 1;
-
-            closeModal();
-            renderSidebar();
-            applyFilters();
-        } catch (error) {
-            console.error(error);
-            showAlert('Error creating web view');
-        }
-
+    if (
+      state.webs.some((web) => web.name.toLowerCase() === name.toLowerCase())
+    ) {
+      showAlert("A Web View with this name already exists.");
+      return;
     }
 
+    try {
+      const res = await window.EdmsAPI.createWebview(name);
+      if (!res.ok) {
+        showAlert("Failed to create Web View via API");
+        return;
+      }
 
-    // ============================================================
-    // DUPLICATE
-    // ============================================================
+      const tagsInput = document.getElementById("createTags").value;
+      const tags = tagsInput
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean);
 
-    function duplicateWeb(id) {
+      for (const t of tags) {
+        await window.EdmsAPI.createWebviewTag(t);
+      }
 
-        const source = getWeb(id);
+      await loadData();
 
-        if (!source) return;
+      state.selected.clear();
+      state.page = 1;
 
-        let copyName = `${source.name} (copy)`;
-        let counter = 2;
+      closeModal();
+      renderSidebar();
+      applyFilters();
+    } catch (error) {
+      console.error(error);
+      showAlert("Error creating web view");
+    }
+  }
 
-        while (state.webs.some(web => web.name.toLowerCase() === copyName.toLowerCase())) {
-            copyName = `${source.name} (copy ${counter})`;
-            counter++;
-        }
+  // ============================================================
+  // DUPLICATE
+  // ============================================================
 
-        const copy = structuredClone(source);
+  function duplicateWeb(id) {
+    const source = getWeb(id);
 
-        copy.id = nextId++;
-        copy.name = copyName;
-        copy.dateCreated = new Date().toISOString().slice(0, 10);
+    if (!source) return;
 
-        state.webs.unshift(copy);
-        sizeUnits[copy.id] = 'MB';
-        state.selected.clear();
-        state.page = 1;
+    let copyName = `${source.name} (copy)`;
+    let counter = 2;
 
-        renderSidebar();
-        applyFilters();
-
+    while (
+      state.webs.some(
+        (web) => web.name.toLowerCase() === copyName.toLowerCase(),
+      )
+    ) {
+      copyName = `${source.name} (copy ${counter})`;
+      counter++;
     }
 
+    const copy = structuredClone(source);
 
-    // ============================================================
-    // DELETE
-    // ============================================================
+    copy.id = nextId++;
+    copy.name = copyName;
+    copy.dateCreated = new Date().toISOString().slice(0, 10);
 
-    function openDeleteModal(ids) {
+    state.webs.unshift(copy);
+    sizeUnits[copy.id] = "MB";
+    state.selected.clear();
+    state.page = 1;
 
-        const webs = ids.map(getWeb).filter(Boolean);
+    renderSidebar();
+    applyFilters();
+  }
 
-        if (!webs.length) return;
+  // ============================================================
+  // DELETE
+  // ============================================================
 
-        openModal(`
+  function openDeleteModal(ids) {
+    const webs = ids.map(getWeb).filter(Boolean);
+
+    if (!webs.length) return;
+
+    openModal(`
 
             <div class="flex items-start gap-3 rounded-lg border border-rose-500/20 bg-rose-500/5 p-3">
                 <div class="mt-0.5 text-rose-400">${iconTrash()}</div>
                 <div>
-                    <h2 class="text-sm font-semibold text-rose-300">Delete ${webs.length > 1 ? 'Web Views' : 'Web View'}</h2>
+                    <h2 class="text-sm font-semibold text-rose-300">Delete ${webs.length > 1 ? "Web Views" : "Web View"}</h2>
                     <p class="mt-1 text-[11px] text-slate-500">This removes the selected web view(s) from the current prototype session.</p>
                 </div>
             </div>
 
             <div class="my-4 max-h-48 overflow-y-auto rounded-lg border border-slate-800">
-                ${webs.map(web => `
+                ${webs
+                  .map(
+                    (web) => `
                     <div class="border-b border-slate-800 px-3 py-2 last:border-0">
                         <p class="font-mono text-xs text-slate-300">${escapeHtml(web.name)}</p>
                     </div>
-                `).join('')}
+                `,
+                  )
+                  .join("")}
             </div>
 
             <div class="flex justify-end gap-2">
@@ -1350,39 +1277,35 @@
 
         `);
 
-        document.getElementById('confirmDelete')?.addEventListener('click', () => {
-            deleteWebs(ids);
-            closeModal();
-        });
+    document.getElementById("confirmDelete")?.addEventListener("click", () => {
+      deleteWebs(ids);
+      closeModal();
+    });
+  }
 
-    }
+  function deleteWebs(ids) {
+    const normalizedIds = ids.map(Number);
 
+    state.webs = state.webs.filter(
+      (web) => !normalizedIds.includes(Number(web.id)),
+    );
 
-    function deleteWebs(ids) {
+    normalizedIds.forEach((id) => state.selected.delete(id));
 
-        const normalizedIds = ids.map(Number);
+    renderSidebar();
+    applyFilters();
+  }
 
-        state.webs = state.webs.filter(web => !normalizedIds.includes(Number(web.id)));
+  // ============================================================
+  // EDIT NAME / TAGS
+  // ============================================================
 
-        normalizedIds.forEach(id => state.selected.delete(id));
+  function openEditWebModal(id) {
+    const web = getWeb(id);
 
-        renderSidebar();
-        applyFilters();
+    if (!web) return;
 
-    }
-
-
-    // ============================================================
-    // EDIT NAME / TAGS
-    // ============================================================
-
-    function openEditWebModal(id) {
-
-        const web = getWeb(id);
-
-        if (!web) return;
-
-        openModal(`
+    openModal(`
 
             <h2 class="mb-4 text-sm font-semibold text-white">Edit Web View</h2>
 
@@ -1390,7 +1313,7 @@
             <input id="editWebName" value="${escapeAttr(web.name)}" class="mb-3 h-9 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-xs outline-none focus:border-cyan-500">
 
             <label class="mb-1 block text-[11px] text-slate-500">Tags</label>
-            <input id="editWebTags" value="${escapeAttr((web.tags || []).join(', '))}" class="mb-4 h-9 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-xs outline-none focus:border-cyan-500">
+            <input id="editWebTags" value="${escapeAttr((web.tags || []).join(", "))}" class="mb-4 h-9 w-full rounded-md border border-slate-700 bg-slate-950 px-3 text-xs outline-none focus:border-cyan-500">
 
             <div class="flex justify-end gap-2">
                 <button type="button" data-modal-close class="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800">Cancel</button>
@@ -1399,56 +1322,55 @@
 
         `);
 
-        document.getElementById('saveWebEdit')?.addEventListener('click', () => {
+    document.getElementById("saveWebEdit")?.addEventListener("click", () => {
+      const newName = document.getElementById("editWebName").value.trim();
 
-            const newName = document.getElementById('editWebName').value.trim();
+      if (!newName) {
+        showAlert("Folder name is required.");
+        return;
+      }
 
-            if (!newName) {
-                showAlert('Folder name is required.');
-                return;
-            }
+      const duplicate = state.webs.some(
+        (item) =>
+          Number(item.id) !== Number(web.id) &&
+          item.name.toLowerCase() === newName.toLowerCase(),
+      );
 
-            const duplicate = state.webs.some(item =>
-                Number(item.id) !== Number(web.id) &&
-                item.name.toLowerCase() === newName.toLowerCase()
-            );
+      if (duplicate) {
+        showAlert("Folder name must be unique.");
+        return;
+      }
 
-            if (duplicate) {
-                showAlert('Folder name must be unique.');
-                return;
-            }
+      web.name = newName;
 
-            web.name = newName;
+      web.tags = document
+        .getElementById("editWebTags")
+        .value.split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean);
 
-            web.tags = document.getElementById('editWebTags').value
-                .split(',').map(tag => tag.trim()).filter(Boolean);
+      closeModal();
+      renderSidebar();
+      applyFilters();
+    });
+  }
 
-            closeModal();
-            renderSidebar();
-            applyFilters();
+  // ============================================================
+  // ANNOTATION
+  // ============================================================
 
-        });
+  function openAnnotationModal(id) {
+    const web = getWeb(id);
 
-    }
+    if (!web) return;
 
-
-    // ============================================================
-    // ANNOTATION
-    // ============================================================
-
-    function openAnnotationModal(id) {
-
-        const web = getWeb(id);
-
-        if (!web) return;
-
-        openModal(`
+    openModal(`
 
             <h2 class="mb-4 text-sm font-semibold text-white">Annotation</h2>
 
             <p class="mb-2 text-[11px] text-slate-500">Markdown annotation</p>
 
-            <textarea id="annotationEditor" class="h-64 w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-300 outline-none focus:border-cyan-500">${escapeHtml(web.annotation || '')}</textarea>
+            <textarea id="annotationEditor" class="h-64 w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-sm text-slate-300 outline-none focus:border-cyan-500">${escapeHtml(web.annotation || "")}</textarea>
 
             <div class="mt-4 flex justify-end gap-2">
                 <button type="button" data-modal-close class="rounded-md border border-slate-700 px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-800">Cancel</button>
@@ -1457,148 +1379,114 @@
 
         `);
 
-        document.getElementById('saveAnnotation')?.addEventListener('click', () => {
+    document.getElementById("saveAnnotation")?.addEventListener("click", () => {
+      web.annotation = document.getElementById("annotationEditor").value;
 
-            web.annotation = document.getElementById('annotationEditor').value;
+      closeModal();
+      render();
+    });
+  }
 
-            closeModal();
-            render();
+  // ============================================================
+  // MODAL
+  // ============================================================
 
-        });
+  function wireModal() {
+    const backdrop = document.getElementById("modalBackdrop");
 
+    if (!backdrop) return;
+
+    backdrop.addEventListener("click", (event) => {
+      if (event.target === backdrop) closeModal();
+
+      if (event.target.closest("[data-modal-close]")) closeModal();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !backdrop.classList.contains("hidden")) {
+        closeModal();
+      }
+    });
+  }
+
+  function openModal(html) {
+    const backdrop = document.getElementById("modalBackdrop");
+    const content = document.getElementById("modalContent");
+
+    if (!backdrop || !content) return;
+
+    content.innerHTML = html;
+
+    backdrop.classList.remove("hidden");
+    backdrop.classList.add("flex");
+  }
+
+  function closeModal() {
+    const backdrop = document.getElementById("modalBackdrop");
+    const content = document.getElementById("modalContent");
+
+    backdrop?.classList.add("hidden");
+    backdrop?.classList.remove("flex");
+
+    if (content) content.innerHTML = "";
+  }
+
+  // ============================================================
+  // SIZE
+  // ============================================================
+
+  function cycleSizeUnit(id) {
+    const units = ["B", "KB", "MB", "GB"];
+
+    const current = sizeUnits[id] || "MB";
+
+    const index = units.indexOf(current);
+
+    sizeUnits[id] = units[(index + 1) % units.length];
+
+    renderTable();
+  }
+
+  function formatSize(bytes, unit) {
+    const value = Number(bytes) || 0;
+
+    switch (unit) {
+      case "B":
+        return `${value.toFixed(0)} B`;
+      case "KB":
+        return `${(value / 1024).toFixed(1)} KB`;
+      case "GB":
+        return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`;
+      case "MB":
+      default:
+        return `${(value / 1024 / 1024).toFixed(1)} MB`;
     }
+  }
 
+  // ============================================================
+  // HELPERS
+  // ============================================================
 
-    // ============================================================
-    // MODAL
-    // ============================================================
+function getWeb(id) {
+    return state.webs.find((web) => Number(web.id) === Number(id));
+  }
 
-    function wireModal() {
+  function escapeHtml(value) {
+    const div = document.createElement("div");
+    div.textContent = String(value ?? "");
+    return div.innerHTML;
+  }
 
-        const backdrop = document.getElementById('modalBackdrop');
+  function escapeAttr(value) {
+    return escapeHtml(value).replace(/"/g, "&quot;");
+  }
 
-        if (!backdrop) return;
+  function showAlert(message) {
+    window.alert(message);
+  }
 
-        backdrop.addEventListener('click', event => {
-
-            if (event.target === backdrop) closeModal();
-
-            if (event.target.closest('[data-modal-close]')) closeModal();
-
-        });
-
-        document.addEventListener('keydown', event => {
-
-            if (event.key === 'Escape' && !backdrop.classList.contains('hidden')) {
-                closeModal();
-            }
-
-        });
-
-    }
-
-
-    function openModal(html) {
-
-        const backdrop = document.getElementById('modalBackdrop');
-        const content = document.getElementById('modalContent');
-
-        if (!backdrop || !content) return;
-
-        content.innerHTML = html;
-
-        backdrop.classList.remove('hidden');
-        backdrop.classList.add('flex');
-
-    }
-
-
-    function closeModal() {
-
-        const backdrop = document.getElementById('modalBackdrop');
-        const content = document.getElementById('modalContent');
-
-        backdrop?.classList.add('hidden');
-        backdrop?.classList.remove('flex');
-
-        if (content) content.innerHTML = '';
-
-    }
-
-
-    // ============================================================
-    // SIZE
-    // ============================================================
-
-    function cycleSizeUnit(id) {
-
-        const units = ['B', 'KB', 'MB', 'GB'];
-
-        const current = sizeUnits[id] || 'MB';
-
-        const index = units.indexOf(current);
-
-        sizeUnits[id] = units[(index + 1) % units.length];
-
-        renderTable();
-
-    }
-
-
-    function formatSize(bytes, unit) {
-
-        const value = Number(bytes) || 0;
-
-        switch (unit) {
-
-            case 'B': return `${value.toFixed(0)} B`;
-            case 'KB': return `${(value / 1024).toFixed(1)} KB`;
-            case 'GB': return `${(value / 1024 / 1024 / 1024).toFixed(2)} GB`;
-            case 'MB':
-            default: return `${(value / 1024 / 1024).toFixed(1)} MB`;
-
-        }
-
-    }
-
-
-    // ============================================================
-    // HELPERS
-    // ============================================================
-
-    function getWeb(id) {
-
-        return state.webs.find(web => Number(web.id) === Number(id));
-
-    }
-
-
-    function escapeHtml(value) {
-
-        const div = document.createElement('div');
-        div.textContent = String(value ?? '');
-        return div.innerHTML;
-
-    }
-
-
-    function escapeAttr(value) {
-
-        return escapeHtml(value).replace(/"/g, '&quot;');
-
-    }
-
-
-    function showAlert(message) {
-
-        window.alert(message);
-
-    }
-
-
-    function iconTrash() {
-
-        return `
+  function iconTrash() {
+    return `
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
                 <path d="M4 7h16"/>
                 <path d="M10 11v6M14 11v6"/>
@@ -1606,32 +1494,32 @@
                 <path d="M9 7V4h6v3"/>
             </svg>
         `;
+  }
 
-    }
+  // ============================================================
+  // PUBLIC API (consumed by rmbrv.js)
+  // ============================================================
 
+  window.WebView = {
+    getState: () => state,
 
-    // ============================================================
-    // PUBLIC API (consumed by rmbrv.js)
-    // ============================================================
+    getWeb,
 
-    window.WebView = {
+    duplicateWeb,
 
-        getState: () => state,
+    openEditWebModal,
 
-        getWeb,
+    openAnnotationModal,
 
-        duplicateWeb,
+    openDataTagsModal,
 
-        openEditWebModal,
+    openCreateModal,
+  };
 
-        openAnnotationModal,
-
-        openDataTagsModal,
-
-        openDeleteModal,
-
-        openCreateModal
-
-    };
-
+  // Expose globally for edit-webview-frontpage.js
+  window.getWeb = getWeb;
+  window.openModal = openModal;
+  window.closeModal = closeModal;
+  window.showAlert = showAlert;
+  window.state = state;
 })();
